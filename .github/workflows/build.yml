@@ -31,19 +31,16 @@ jobs:
           node scripts/patch-android.js
           npx cap sync android
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-      - name: APK bouwen
+      - name: APK bouwen (vaste sleutel, oplopend versienummer)
         working-directory: android
+        env: { BUILD_NUMBER: '${{ github.run_number }}' }
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
       - name: Hernoemen
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Klankstroom-android.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Klankstroom.apk
       - uses: actions/upload-artifact@v4
-        with: { name: Klankstroom-android, path: Klankstroom-android.apk }
-      - name: Release (bij tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with: { files: Klankstroom-android.apk }
+        with: { name: android, path: Klankstroom.apk }
 
   windows:
     name: Windows-app
@@ -57,13 +54,32 @@ jobs:
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Klankstroom-windows
+          name: windows
           path: |
-            dist/*.exe
-      - name: Release (bij tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with: { files: 'dist/*.exe' }
+            dist/Klankstroom-Setup.exe
+            dist/Klankstroom-portable.exe
+
+  release:
+    name: Release (downloadpagina)
+    needs: [android, windows]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: Klankstroom 1.0.${{ github.run_number }}
+          make_latest: true
+          body: |
+            **Android:** download `Klankstroom.apk` en installeer (sta "onbekende bronnen" toe). Nieuwe versies installeren gewoon over de oude heen.
+            **Windows:** `Klankstroom-Setup.exe` (installer) of `Klankstroom-portable.exe` (zonder installatie).
+            **Web:** https://endless1977.github.io/MusicPlayer/
+          files: |
+            out/Klankstroom.apk
+            out/Klankstroom-Setup.exe
+            out/Klankstroom-portable.exe
 
   pages:
     name: Webversie (GitHub Pages)

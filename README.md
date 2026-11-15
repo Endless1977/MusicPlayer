@@ -4,6 +4,11 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 
 ![wapen](www/icons/wapen.svg)
 
+**⬇ Downloads:** [Releases → latest](https://github.com/Endless1977/MusicPlayer/releases/latest)
+· [Klankstroom.apk (Android)](https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom.apk)
+· [Klankstroom-Setup.exe (Windows)](https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom-Setup.exe)
+· [webversie](https://endless1977.github.io/MusicPlayer/)
+
 ## Wat zit erin
 
 | Onderdeel | Wat het doet |
@@ -21,12 +26,15 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 
 ## Downloaden
 
-Bij elke push naar `main` bouwt **GitHub Actions** automatisch:
-- **Android:** `Klankstroom-android.apk` (tabblad *Actions*, onderaan bij *Artifacts*). Installeer de APK op je telefoon en sta “onbekende bronnen” toe.
-- **Windows:** installer + portable `.exe`.
-- **Web:** de app op GitHub Pages (`https://endless1977.github.io/MusicPlayer/`). Zet daarvoor één keer *Settings → Pages → Source: GitHub Actions* aan.
+Bij elke push naar `main` bouwt **GitHub Actions** alles automatisch en zet het op [Releases → latest](https://github.com/Endless1977/MusicPlayer/releases/latest):
 
-Wil je een versie als download op de Releases-pagina? Maak dan een tag aan: `git tag v1.0.0 && git push --tags`.
+| Platform | Bestand |
+|---|---|
+| Android | `Klankstroom.apk`: downloaden en installeren (sta “onbekende bronnen” toe). Een nieuwe versie installeert over de oude heen; je bibliotheek en instellingen blijven bewaard. |
+| Windows | `Klankstroom-Setup.exe` (installer) of `Klankstroom-portable.exe` |
+| Web | https://endless1977.github.io/MusicPlayer/ |
+
+De APK is ondertekend met de sleutel in `signing/`. Die sleutel staat openbaar in de repo: prima voor eigen gebruik, maar niet geschikt voor de Play Store.
 
 ## Zelf bouwen
 

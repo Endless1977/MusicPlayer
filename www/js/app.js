@@ -384,6 +384,7 @@
     if (key === 'hideBroken') loadRadio();
   });
   syncToggles();
+  if (K.platform !== 'web') $('#dlRow').classList.add('hidden');
 
   /* ---------------- sneltoetsen ---------------- */
   window.addEventListener('keydown', e => {

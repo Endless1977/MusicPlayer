@@ -33,7 +33,7 @@
     "directories": { "output": "dist" },
     "win": { "target": ["nsis", "portable"], "icon": "www/icons/icon-512.png" },
     "linux": { "target": ["AppImage"], "icon": "www/icons/icon-512.png", "category": "Audio" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "shortcutName": "Klankstroom" },
-    "portable": { "artifactName": "Klankstroom-${version}-portable.exe" }
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "shortcutName": "Klankstroom", "artifactName": "Klankstroom-Setup.exe" },
+    "portable": { "artifactName": "Klankstroom-portable.exe" }
   }
 }

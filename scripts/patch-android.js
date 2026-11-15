@@ -71,4 +71,23 @@ if (!man.includes('nl.endless.klankstroom" android:host="spotify')) {
 }
 if (!man.includes('usesCleartextTraffic')) man = man.replace('<application', '<application android:usesCleartextTraffic="true"');
 fs.writeFileSync(manFile, man);
+// 4. Vaste ondertekeningssleutel + oplopend versienummer, zodat een nieuwe APK over de oude heen installeert
+const gradleFile = path.join(root, 'android', 'app', 'build.gradle');
+let gradle = fs.readFileSync(gradleFile, 'utf8');
+if (!gradle.includes('signingConfigs')) {
+  gradle = gradle.replace(/versionCode \d+/, "versionCode ((System.getenv('BUILD_NUMBER') ?: '1') as Integer)")
+    .replace(/versionName "[^"]*"/, "versionName \"1.0.\" + (System.getenv('BUILD_NUMBER') ?: '0')")
+    .replace('    buildTypes {', `    signingConfigs {
+        klankstroom {
+            storeFile file('../../signing/klankstroom.jks')
+            storePassword 'klankstroom'
+            keyAlias 'klankstroom'
+            keyPassword 'klankstroom'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.klankstroom }`)
+    .replace(/release \{\n(\s*)minifyEnabled false/, "release {\n$1signingConfig signingConfigs.klankstroom\n$1minifyEnabled false");
+  fs.writeFileSync(gradleFile, gradle);
+}
 console.log('Android-project gepatcht ✔');
