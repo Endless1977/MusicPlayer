@@ -317,6 +317,7 @@
   const toggleSaver = () => { S.saver = !S.saver; K.toast('Screensaver ' + (S.saver ? 'aan' : 'uit')); };
   $('#vizToggle').addEventListener('click', toggleViz);
   $('#vizToggle2').addEventListener('click', toggleViz);
+  $('#vizOff').addEventListener('click', () => { if (!S.viz) toggleViz(); });
   $('#saverToggle').addEventListener('click', toggleSaver);
   $('#vizFull').addEventListener('click', () => fullscreen($('#stage')));
   $('#stage').addEventListener('dblclick', () => fullscreen($('#stage')));
