@@ -57,6 +57,16 @@ public class MediaScanPlugin extends Plugin {
         "com.oppo.fmradio", "com.coloros.fmradio", "com.vivo.FMRadio", "com.asus.fmradio", "com.htc.fm", "com.nothing.fmradio"
     };
 
+    private final StreamProxy proxy = new StreamProxy();
+
+    /** Poort van de doorgeefserver (zodat de visualizer ook radiostreams kan analyseren). */
+    @PluginMethod
+    public void proxyPort(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("port", proxy.start());
+        call.resolve(r);
+    }
+
     private String audioAlias() { return Build.VERSION.SDK_INT >= 33 ? "audio33" : "audioLegacy"; }
 
     @Override

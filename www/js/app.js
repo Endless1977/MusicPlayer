@@ -255,6 +255,14 @@
       }
     }
   });
+  K.on('analysis', ok => {
+    const v = $('#vizSrc');
+    v.classList.remove('hidden');
+    v.textContent = ok ? '🎵 reageert op de muziek'
+      : P.current && P.current.source === 'spotify' ? '∿ geschat ritme (Spotify laat geen analyse toe)'
+      : K.platform === 'web' ? '∿ geschat ritme: deze zender staat analyse in de browser niet toe (wel in de app)'
+      : '∿ geschat ritme: deze stream staat analyse niet toe';
+  });
   let seeking = false;
   K.on('time', ({ t, d }) => {
     $('#pTime').textContent = fmtTime(t).replace('LIVE', '0:00');

@@ -84,11 +84,17 @@
     if (ctx && ctx.state === 'suspended') ctx.resume();
     // Lokale bestanden (blob/file/capacitor) en Electron: altijd via de analyser.
     const sameOriginish = /^(blob:|data:|file:|capacitor:|https?:\/\/localhost)/.test(url) || K.platform === 'electron' || url.startsWith(location.origin);
+    // Android: externe streams via de eigen doorgeefserver (voegt CORS toe → echte analyse)
+    let urlA = url;
+    if (K.platform === 'android' && !sameOriginish && /^https?:\/\//.test(url) && !/\.m3u8(\?|$)/i.test(url)) {
+      const port = await proxyPort();
+      if (port) urlA = `http://127.0.0.1:${port}/s?u=${encodeURIComponent(url)}`;
+    }
     const tryEl = async (el) => {
       active = el;
       el.crossOrigin = el === A ? 'anonymous' : null;
       if (el === B) el.removeAttribute('crossorigin');
-      attach(el, url);
+      attach(el, el === A ? urlA : url);
       el.volume = el === A && gain ? 1 : K.settings.volume;
       await el.play();
     };
@@ -103,6 +109,15 @@
       await tryEl(B);
       P.analysisOK = false;
     }
+  }
+
+  let portP = null;
+  function proxyPort() {
+    if (!portP) {
+      const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+      portP = MS && MS.proxyPort ? MS.proxyPort().then(r => r.port || 0).catch(() => 0) : Promise.resolve(0);
+    }
+    return portP;
   }
 
   P.play = async (item, queue) => {
@@ -130,6 +145,7 @@
       P.playing = true;
       K.recent.add(item);
       K.emit('state', 'playing');
+      K.emit('analysis', P.analysisOK);
       updateSession(item);
     } catch (e) {
       console.warn('Afspelen mislukt', e);
@@ -158,6 +174,7 @@
     await A.play();
     P.analysisOK = true; P.playing = true;
     K.emit('state', 'playing');
+    K.emit('analysis', true);
     updateSession(item);
   };
 
