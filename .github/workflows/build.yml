@@ -16,12 +16,13 @@ jobs:
     name: Android APK
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: 21 }
-      - uses: android-actions/setup-android@v3
+      - name: Android SDK (staat al op de runner)
+        run: echo "sdk.dir=$ANDROID_HOME" && ls $ANDROID_HOME/platforms | tail -3
       - name: Afhankelijkheden
         run: npm install --no-audit --no-fund --ignore-scripts
       - name: Android-project maken + eigen plugin
@@ -29,6 +30,7 @@ jobs:
           npx cap add android
           node scripts/patch-android.js
           npx cap sync android
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
       - name: APK bouwen
         working-directory: android
         run: |
@@ -47,8 +49,8 @@ jobs:
     name: Windows-app
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - run: npm install --no-audit --no-fund
       - run: npx electron-builder --win nsis portable --publish never
@@ -70,7 +72,7 @@ jobs:
     continue-on-error: true
     environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
         with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3
