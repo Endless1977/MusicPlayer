@@ -104,6 +104,9 @@ h2{font-size:17px;color:var(--muted);margin:24px 0 10px}
 /* Now playing stage */
 #stage{position:relative;width:100%;height:min(62vh,620px);border-radius:var(--radius);overflow:hidden;background:#000;border:1px solid var(--line)}
 #stage:fullscreen{height:100%;border-radius:0}
+#stage.pseudo-fs{position:fixed;inset:0;z-index:90;height:auto;border-radius:0;border:0}
+#stage.pseudo-fs #stageControls{opacity:.9;top:calc(14px + var(--sat));right:calc(14px + var(--sar))}
+#stage.pseudo-fs #stageInfo{bottom:calc(20px + var(--sab));left:calc(20px + var(--sal))}
 #vizCanvas,#saverCanvas,.viz3d{width:100%;height:100%;display:block}
 .viz3d{position:absolute;inset:0}
 #saver .viz3d{z-index:0}#saverInfo{z-index:1}

@@ -8,7 +8,8 @@
   const app = K.app = {
     view: 'radio',
     show(v) {
-      app.view = v;
+      if (app.exitFullscreen) app.exitFullscreen();   // nooit een volledig scherm laten hangen
+    app.view = v;
       $$('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
       $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
       if (v === 'accounts') K.accounts.render();
@@ -321,20 +322,40 @@
   $('#saverToggle').addEventListener('click', toggleSaver);
   $('#vizFull').addEventListener('click', () => fullscreen($('#stage')));
   $('#stage').addEventListener('dblclick', () => fullscreen($('#stage')));
-  function fullscreen(node) {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else if (node.requestFullscreen) node.requestFullscreen().catch(() => {});
+  /* Volledig scherm. Op Android een eigen CSS-modus: de native WebView-fullscreen legt een
+     extra laag over de app die bij de terugknop kon blijven hangen en alle tikken blokkeerde. */
+  const bars = on => {
+    try { const SB = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.SystemBars; if (SB) (on ? SB.show() : SB.hide()).catch(() => {}); } catch {}
+  };
+  const pseudoFs = () => K.platform === 'android' || !document.documentElement.requestFullscreen;
+  function isFullscreen() { return !!document.fullscreenElement || !!$('.pseudo-fs'); }
+  function exitFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    const p = $('.pseudo-fs');
+    if (p) { p.classList.remove('pseudo-fs'); bars(true); }
+    $('#vizFull').textContent = '⛶';
   }
+  function fullscreen(node) {
+    if (isFullscreen()) return exitFullscreen();
+    if (pseudoFs()) { node.classList.add('pseudo-fs'); bars(false); $('#vizFull').textContent = '✕'; }
+    else node.requestFullscreen().catch(() => {});
+  }
+  app.exitFullscreen = exitFullscreen;
+  app.isFullscreen = isFullscreen;
+  document.addEventListener('fullscreenchange', () => { $('#vizFull').textContent = document.fullscreenElement ? '✕' : '⛶'; });
 
   let idleSince = performance.now(), wakeLock = null;
   const openSaver = async () => {
     if (!saver.classList.contains('hidden')) return;
     saver.classList.remove('hidden');
+    if (K.platform === 'android') bars(false);
     try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
   };
   const closeSaver = () => {
+    idleSince = performance.now();          // anders gaat hij na 1 seconde meteen weer open
     if (saver.classList.contains('hidden')) return;
     saver.classList.add('hidden');
+    if (K.platform === 'android' && !$('.pseudo-fs')) bars(true);
     if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   };
   const activity = () => { idleSince = performance.now(); closeSaver(); };
@@ -366,6 +387,7 @@
 
   /* ---------------- sneltoetsen ---------------- */
   window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('.pseudo-fs')) return exitFullscreen();
     if (e.target.matches('input, select, textarea')) return;
     const k = e.key.toLowerCase();
     if (k === ' ') { e.preventDefault(); P.toggle(); }
@@ -388,6 +410,7 @@
   const C = window.Capacitor && Capacitor.Plugins;
   if (C && C.App) C.App.addListener('backButton', () => {
     if (!saver.classList.contains('hidden')) closeSaver();
+    else if (app.isFullscreen()) app.exitFullscreen();
     else if ($('#scanDialog').open) $('#scanDialog').close();
     else if (app.view !== 'radio') app.show('radio');
     else C.App.minimizeApp ? C.App.minimizeApp() : C.App.exitApp();
