@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f1e">
+<title>Klankstroom</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/wapen.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <img src="icons/wapen.svg" alt="Wapen Endless" class="wapen">
+      <div><div class="brand-name">Klankstroom</div><div class="brand-sub">by Endless</div></div>
+    </div>
+    <nav id="nav">
+      <button data-view="radio" class="active"><span class="ico">📻</span><span>Radio</span></button>
+      <button data-view="search"><span class="ico">🔎</span><span>Zoeken</span></button>
+      <button data-view="library"><span class="ico">💽</span><span>Bibliotheek</span></button>
+      <button data-view="favorites"><span class="ico">★</span><span>Favorieten</span></button>
+      <button data-view="nowplaying"><span class="ico">🌀</span><span>Nu speelt</span></button>
+      <button data-view="accounts"><span class="ico">🔗</span><span>Accounts</span></button>
+      <button data-view="settings"><span class="ico">⚙</span><span>Instellingen</span></button>
+    </nav>
+    <button id="scanBtn" class="scan-btn" title="Scan lokale hardware"><span class="ico">📡</span><span>Scan hardware</span></button>
+    <div id="netState" class="net-state">● online</div>
+  </aside>
+
+  <main id="main">
+    <!-- RADIO -->
+    <section id="view-radio" class="view active">
+      <header class="view-head">
+        <h1>Radio</h1>
+        <div class="toolbar">
+          <input id="radioQuery" type="search" placeholder="Zoek zender (bijv. NPO, 538, jazz)…">
+          <select id="radioCountry"><option value="">Alle landen</option></select>
+          <select id="radioOrder">
+            <option value="clickcount">Populair</option>
+            <option value="votes">Meeste stemmen</option>
+            <option value="name">Naam</option>
+            <option value="bitrate">Bitrate</option>
+          </select>
+          <button id="radioGo" class="primary">Zoek</button>
+        </div>
+        <div id="radioTags" class="chips"></div>
+        <div class="toolbar">
+          <input id="customStream" type="url" placeholder="Of plak een eigen stream-URL (mp3/aac/m3u/pls/hls)…">
+          <button id="customStreamGo">Afspelen</button>
+        </div>
+      </header>
+      <div id="radioList" class="grid"></div>
+      <div class="more-wrap"><button id="radioMore" class="ghost hidden">Meer zenders</button></div>
+    </section>
+
+    <!-- SEARCH -->
+    <section id="view-search" class="view">
+      <header class="view-head">
+        <h1>Muziek zoeken</h1>
+        <div class="toolbar">
+          <input id="musicQuery" type="search" placeholder="Artiest, nummer, genre…">
+          <button id="musicGo" class="primary">Zoek</button>
+        </div>
+        <div id="sourceChips" class="chips"></div>
+        <p class="hint">Alleen legale bronnen: Audius, Internet Archive, Jamendo (gratis sleutel) en je gekoppelde accounts.</p>
+      </header>
+      <div id="searchResults"></div>
+    </section>
+
+    <!-- LIBRARY -->
+    <section id="view-library" class="view">
+      <header class="view-head">
+        <h1>Bibliotheek <small>(werkt offline)</small></h1>
+        <div class="toolbar">
+          <button id="addFolder" class="primary">Map toevoegen</button>
+          <button id="addFiles">Bestanden toevoegen</button>
+          <input id="libFilter" type="search" placeholder="Filter…">
+          <select id="libSource"><option value="">Alle bronnen</option></select>
+          <button id="libClear" class="ghost danger">Leegmaken</button>
+        </div>
+        <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+        <input id="filesInput" type="file" accept="audio/*,.mp3,.flac,.ogg,.m4a,.wav,.opus,.aac" multiple hidden>
+      </header>
+      <div id="libStats" class="hint"></div>
+      <div id="libList" class="tracklist"></div>
+    </section>
+
+    <!-- FAVORITES -->
+    <section id="view-favorites" class="view">
+      <header class="view-head"><h1>Favorieten</h1></header>
+      <h2>Zenders</h2><div id="favStations" class="grid"></div>
+      <h2>Nummers</h2><div id="favTracks" class="tracklist"></div>
+      <h2>Laatst gespeeld</h2><div id="recent" class="tracklist"></div>
+    </section>
+
+    <!-- NOW PLAYING -->
+    <section id="view-nowplaying" class="view">
+      <div id="stage">
+        <canvas id="vizCanvas"></canvas>
+        <div id="stageInfo">
+          <img id="stageCover" alt="">
+          <div><div id="stageTitle">Niets aan het spelen</div><div id="stageArtist"></div></div>
+        </div>
+        <div id="stageControls">
+          <select id="vizMode"></select>
+          <select id="vizVariant" title="Variant"></select>
+          <button id="vizToggle2" title="Visualizer aan/uit">Visualizer</button>
+          <button id="vizFull" title="Volledig scherm">⛶</button>
+        </div>
+        <div id="vizOff" class="hidden">Visualizer staat uit</div>
+      </div>
+      <h2>Wachtrij</h2>
+      <div id="queueList" class="tracklist"></div>
+    </section>
+
+    <!-- ACCOUNTS -->
+    <section id="view-accounts" class="view">
+      <header class="view-head"><h1>Accounts koppelen</h1>
+      <p class="hint">Koppel betaalde of eigen diensten. Gegevens blijven alleen op dit apparaat.</p></header>
+      <div id="accountCards" class="cards"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <header class="view-head"><h1>Instellingen</h1></header>
+      <div class="settings">
+        <label class="switch-row"><span>Visualizer</span><input type="checkbox" id="setViz"><i></i></label>
+        <label class="switch-row"><span>Screensaver bij inactiviteit</span><input type="checkbox" id="setSaver"><i></i></label>
+        <label class="row"><span>Screensaver na</span>
+          <select id="setSaverDelay"><option value="30">30 sec</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option><option value="600">10 min</option></select></label>
+        <label class="switch-row"><span>Screensaver ook als er niets speelt</span><input type="checkbox" id="setSaverIdle"><i></i></label>
+        <label class="row"><span>Visualizer-stijl</span><select id="setVizMode"></select></label>
+        <label class="row"><span>Variant (kleur en vorm)</span><select id="setVizVariant"></select></label>
+        <label class="switch-row"><span>Visualizer-stijl automatisch wisselen</span><input type="checkbox" id="setVizCycle"><i></i></label>
+        <label class="row"><span>Gevoeligheid</span><input type="range" id="setSens" min="0.3" max="3" step="0.1"></label>
+        <label class="row"><span>Kwaliteit (resolutie)</span>
+          <select id="setVizRes"><option value="0.5">Laag (zuinig)</option><option value="0.75">Normaal</option><option value="1">Hoog</option></select></label>
+        <label class="switch-row"><span>Alleen werkende zenders tonen</span><input type="checkbox" id="setHideBroken"><i></i></label>
+        <label class="row"><span>Thema-accent</span><input type="color" id="setAccent"></label>
+        <div class="row"><span>Over</span><span class="hint">Klankstroom v1.0 · Endless · <a href="https://github.com/Endless1977/MusicPlayer" target="_blank" rel="noopener">GitHub</a></span></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- PLAYER BAR -->
+  <footer id="player">
+    <div class="p-left">
+      <img id="pCover" src="icons/wapen.svg" alt="">
+      <div class="p-meta"><div id="pTitle">Klankstroom</div><div id="pArtist">Kies een zender of nummer</div></div>
+      <button id="pFav" class="icon" title="Favoriet">☆</button>
+    </div>
+    <div class="p-center">
+      <div class="p-buttons">
+        <button id="pShuffle" class="icon" title="Shuffle">⤮</button>
+        <button id="pPrev" class="icon" title="Vorige">⏮</button>
+        <button id="pPlay" class="icon big" title="Afspelen/pauze">▶</button>
+        <button id="pNext" class="icon" title="Volgende">⏭</button>
+        <button id="pRepeat" class="icon" title="Herhalen">↻</button>
+      </div>
+      <div class="p-progress"><span id="pTime">0:00</span><input type="range" id="pSeek" min="0" max="1000" value="0"><span id="pDur">LIVE</span></div>
+    </div>
+    <div class="p-right">
+      <canvas id="miniViz" width="120" height="32"></canvas>
+      <button id="vizToggle" class="icon toggle" title="Visualizer aan/uit">🌀</button>
+      <button id="saverToggle" class="icon toggle" title="Screensaver aan/uit">🖥</button>
+      <button id="pMute" class="icon" title="Dempen">🔊</button>
+      <input type="range" id="pVol" min="0" max="1" step="0.01">
+    </div>
+  </footer>
+</div>
+
+<!-- SCREENSAVER -->
+<div id="saver" class="hidden">
+  <canvas id="saverCanvas"></canvas>
+  <div id="saverInfo"><div id="saverTitle"></div><div id="saverArtist"></div><div id="saverClock"></div></div>
+</div>
+
+<!-- SCAN DIALOG -->
+<dialog id="scanDialog">
+  <h2>Hardwarescan</h2>
+  <div id="scanBody">Bezig met scannen…</div>
+  <div class="dlg-actions"><button id="scanClose" class="primary">Sluiten</button></div>
+</dialog>
+
+<div id="toast"></div>
+
+<audio id="audioA" preload="none" crossorigin="anonymous"></audio>
+<audio id="audioB" preload="none"></audio>
+
+<script src="vendor/hls.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/id3.js"></script>
+<script src="js/md5.js"></script>
+<script src="js/player.js"></script>
+<script src="js/visualizer.js"></script>
+<script src="js/radio.js"></script>
+<script src="js/sources.js"></script>
+<script src="js/accounts.js"></script>
+<script src="js/library.js"></script>
+<script src="js/scan.js"></script>
+<script src="js/app.js"></script>
+<script type="module" src="js/viz3d.js"></script>
+</body>
+</html>

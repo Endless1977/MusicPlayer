@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2a6b"/><stop offset="1" stop-color="#0f1a45"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/><stop offset=".5" stop-color="#d4a23a"/><stop offset="1" stop-color="#fff1b8"/>
+    </linearGradient>
+    <path id="st" d="M0 -7 L2 -2 L7 -2 L3 1 L4.5 6 L0 3 L-4.5 6 L-3 1 L-7 -2 L-2 -2Z"/>
+    <clipPath id="shield"><path d="M100 8 L186 30 V110 C186 170 146 208 100 230 C54 208 14 170 14 110 V30 Z"/></clipPath>
+  </defs>
+  <path d="M100 8 L186 30 V110 C186 170 146 208 100 230 C54 208 14 170 14 110 V30 Z" fill="url(#sky)"/>
+  <g clip-path="url(#shield)">
+    <!-- golven -->
+    <path d="M0 160 q25 -14 50 0 t50 0 t50 0 t50 0 V240 H0Z" fill="#2a7fd4"/>
+    <path d="M0 178 q25 -14 50 0 t50 0 t50 0 t50 0 V240 H0Z" fill="#1f62b0"/>
+    <path d="M0 196 q25 -14 50 0 t50 0 t50 0 t50 0 V240 H0Z" fill="#164a8a"/>
+    <!-- zwaan -->
+    <path fill="#fff" d="M118 86c-9-2-15 5-13 13 2 7 9 11 9 19 0 6-5 10-11 10-12 0-22-8-36-8-10 0-17 6-15 13 3 10 18 19 40 19 25 0 44-12 44-30 0-12-8-20-10-27-1-4 1-6 4-6l9 1-6-4c-3-1-6-1-9 0z"/>
+    <path fill="#f0a030" d="M118 86l12 2-9 4z"/>
+    <circle cx="117" cy="91" r="1.6" fill="#0f1a45"/>
+    <!-- sterren -->
+    <g fill="#ffd75a">
+      <use href="#st" x="44" y="42"/><use href="#st" x="72" y="34"/><use href="#st" x="100" y="30"/><use href="#st" x="128" y="34"/><use href="#st" x="156" y="42"/>
+    </g>
+  </g>
+  <path d="M100 8 L186 30 V110 C186 170 146 208 100 230 C54 208 14 170 14 110 V30 Z" fill="none" stroke="url(#rim)" stroke-width="7"/>
+  <text x="100" y="72" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="20" fill="#ffe08a" letter-spacing="3">ENDLESS</text>
+</svg>
