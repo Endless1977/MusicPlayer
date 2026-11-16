@@ -27,6 +27,64 @@
     return out;
   }
 
+  /* ---- hardware-apps van de fabrikant (autoradio: tuner en CD/DVD) ---- */
+  const KIND = { radio: { icon: '📻', name: 'Radio' }, disc: { icon: '💿', name: 'CD/DVD' } };
+  const getHw = () => K.LS.get('hwApps', {});
+  const setHw = (kind, app) => { const h = getHw(); if (app) h[kind] = app; else delete h[kind]; K.LS.set('hwApps', h); K.emit('hwapps'); };
+  const launch = (MS, a) => (K.player.playing ? K.player.toggle() : Promise.resolve()).catch(() => {}).then(() => MS.launchApp({ package: a.package })).catch(() => K.toast('Kan ' + a.label + ' niet openen'));
+
+  function hwSection(MS, kind, title, found, okText, noText) {
+    const out = [K.el('h3', {}, title)];
+    const chosen = getHw()[kind];
+    const list = chosen ? [chosen, ...found.filter(a => a.package !== chosen.package)] : found;
+    for (const a of list) {
+      const isChosen = chosen && chosen.package === a.package;
+      out.push(item(a.label + (isChosen ? '  ★' : ''), (isChosen ? 'Jouw keuze · ' : '') + okText + ' (' + a.package + ')', true,
+        isChosen ? null : btn('Onthoud', () => { setHw(kind, a); K.toast(a.label + ' onthouden als ' + KIND[kind].name); run(); }),
+        btn('Open', () => { if (!getHw()[kind]) setHw(kind, a); dlg.close(); launch(MS, a); }, true)));
+    }
+    if (!list.length) out.push(item(noText, 'Kies hieronder zelf de juiste app van je autoradio.', false));
+    out.push(item('Andere app kiezen…', 'Staat de ' + KIND[kind].name.toLowerCase() + '-app er niet bij? Kies hem uit al je apps.', true,
+      btn('Kies app', () => pickApp(MS, kind)),
+      chosen ? btn('Vergeten', () => { setHw(kind, null); run(); }) : null));
+    return out;
+  }
+
+  async function pickApp(MS, kind) {
+    body.innerHTML = '<div class="loader">Apps laden…</div>';
+    let apps = [];
+    try { apps = (await MS.listApps()).apps; } catch { K.toast('Kan de lijst met apps niet lezen'); return run(); }
+    const filter = K.el('input', { type: 'search', placeholder: 'Zoek app (bijv. radio, dvd, tuner)…', style: 'width:100%;margin-bottom:8px' });
+    const list = K.el('div');
+    const draw = () => {
+      const q = filter.value.trim().toLowerCase();
+      list.innerHTML = '';
+      apps.filter(a => !q || (a.label + ' ' + a.package).toLowerCase().includes(q)).forEach(a =>
+        list.append(item(a.label, a.package, true, btn('Kies', () => { setHw(kind, a); K.toast(a.label + ' gekoppeld als ' + KIND[kind].name); run(); }, true))));
+    };
+    filter.addEventListener('input', draw);
+    body.innerHTML = '';
+    body.append(K.el('h3', {}, 'Kies de ' + KIND[kind].name + '-app van je autoradio'), filter, list, btn('← Terug', run));
+    draw();
+  }
+
+  /* snelknoppen bovenaan Radio (alleen Android) */
+  function renderHwBar() {
+    const bar = K.$('#hwBar');
+    if (!bar) return;
+    const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+    const h = getHw();
+    bar.innerHTML = '';
+    if (K.platform !== 'android' || !MS) return bar.classList.add('hidden');
+    for (const kind of ['radio', 'disc']) {
+      const a = h[kind];
+      if (a) bar.append(K.el('button', { class: 'chip on', onclick: () => launch(MS, a) }, KIND[kind].icon + ' ' + a.label));
+    }
+    bar.classList.toggle('hidden', !bar.children.length);
+  }
+  K.on('hwapps', renderHwBar);
+  setTimeout(renderHwBar, 0);
+
   async function scanAndroid() {
     const MS = Capacitor.Plugins.MediaScan;
     if (!MS) return [item('Scan-plugin ontbreekt', 'Bouw de app opnieuw met de MediaScan-plugin', false)];
@@ -47,11 +105,10 @@
         ? 'CD/DVD-speler gevonden. Data-CD’s met MP3’s verschijnen als opslag hierboven; audio-CD’s (CDDA) kan Android niet direct lezen — sluit de speler dan aan via een lijn-ingang.'
         : u.storage ? 'USB-opslag — nummers staan hierboven zodra Android de stick heeft gekoppeld' : (u.audio ? 'USB-audio-apparaat — zie Audio-ingangen' : 'Overig USB-apparaat'), u.storage || u.optical));
     }
-    out.push(K.el('h3', {}, 'FM-radio'));
-    if (r.fm.apps.length) for (const a of r.fm.apps)
-      out.push(item('Ingebouwde FM-radio: ' + a.label, 'Gebruikt de FM-chip van je telefoon (koptelefoon = antenne). Werkt zonder internet.', true,
-        btn('Open', () => MS.launchApp({ package: a.package }).catch(() => K.toast('Kan niet openen')), true)));
-    else out.push(item('Geen FM-radio gevonden', r.fm.hint || 'De meeste nieuwe telefoons hebben geen FM-chip of geven hem niet vrij', false));
+    out.push(...hwSection(MS, 'radio', 'Radio-tuner (FM/AM/DAB)', r.fm.apps,
+      'Werkt zonder internet via de tuner van je autoradio of telefoon.', r.fm.hint || 'Geen radio-app herkend'));
+    out.push(...hwSection(MS, 'disc', 'CD/DVD-speler', (r.disc && r.disc.apps) || [],
+      'Ingebouwde CD/DVD-speler van je autoradio.', 'Geen CD/DVD-app herkend'));
     out.push(btn('Hele bibliotheek in één keer toevoegen', async () => { await K.library.addAndroid(r.tracks); K.app.show('library'); dlg.close(); }, true));
     return out;
   }

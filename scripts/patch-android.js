@@ -53,7 +53,11 @@ if (!man.includes('<queries>')) {
   const fm = ['com.android.fmradio', 'com.caf.fmradio', 'com.sec.android.app.fm', 'com.motorola.fmplayer', 'com.miui.fm', 'com.miui.fmradio',
     'com.huawei.android.FMRadio', 'com.sonyericsson.fmradio', 'com.sony.fmradio', 'com.lge.fmradio', 'com.mediatek.fmradio', 'com.mediatek.FMRadio',
     'com.android.FMRadio', 'com.zte.fmradio', 'com.oppo.fmradio', 'com.coloros.fmradio', 'com.vivo.FMRadio', 'com.asus.fmradio', 'com.htc.fm', 'com.nothing.fmradio'];
-  man = man.replace('</manifest>', `    <queries>\n${fm.map(p => `        <package android:name="${p}" />`).join('\n')}\n    </queries>\n</manifest>`);
+  man = man.replace('</manifest>', `    <queries>\n${fm.map(p => `        <package android:name="${p}" />`).join('\n')}
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>\n    </queries>\n</manifest>`);
 }
 if (!man.includes('PlaybackService')) {
   man = man.replace('</application>',

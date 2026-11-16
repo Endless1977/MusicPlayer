@@ -54,7 +54,10 @@ public class MediaScanPlugin extends Plugin {
         "com.android.fmradio", "com.caf.fmradio", "com.sec.android.app.fm", "com.motorola.fmplayer",
         "com.miui.fm", "com.miui.fmradio", "com.huawei.android.FMRadio", "com.sonyericsson.fmradio", "com.sony.fmradio",
         "com.lge.fmradio", "com.mediatek.fmradio", "com.mediatek.FMRadio", "com.android.FMRadio", "com.zte.fmradio",
-        "com.oppo.fmradio", "com.coloros.fmradio", "com.vivo.FMRadio", "com.asus.fmradio", "com.htc.fm", "com.nothing.fmradio"
+        "com.oppo.fmradio", "com.coloros.fmradio", "com.vivo.FMRadio", "com.asus.fmradio", "com.htc.fm", "com.nothing.fmradio",
+        // autoradio's (FYT/Joying/Teyes, MTCD/MTCE/PX5/PX6, TopWay/TS10, ATOTO, enz.)
+        "com.syu.radio", "com.syu.dab", "com.microntek.radio", "com.tw.radio", "com.ts.radio", "com.hct.radio", "com.nwd.radio",
+        "com.android.car.radio", "com.qf.radio", "com.fyt.radio", "com.atoto.radio", "com.spd.radio", "com.xy.radio", "com.autochips.fmradio"
     };
 
     private final StreamProxy proxy = new StreamProxy();
@@ -178,24 +181,75 @@ public class MediaScanPlugin extends Plugin {
         }
         out.put("usb", usb);
 
-        // FM-radio
-        JSObject fm = new JSObject();
-        JSArray apps = new JSArray();
+        // Radio-tuner en CD/DVD-speler: op autoradio's en telefoons zijn dit apps van de fabrikant.
+        // We doorzoeken alle apps met een startpictogram op bekende namen en trefwoorden.
         PackageManager pm = ctx.getPackageManager();
-        for (String p : FM_PACKAGES) {
-            Intent li = pm.getLaunchIntentForPackage(p);
-            if (li == null) continue;
+        JSArray radioApps = new JSArray(), discApps = new JSArray();
+        for (JSObject a : launcherApps(ctx)) {
+            String p = a.getString("package"), label = a.getString("label");
+            if (p.equals(ctx.getPackageName())) continue;
+            if (isKnown(p, FM_PACKAGES) || isRadio(p, label)) radioApps.put(a);
+            else if (isKnown(p, DISC_PACKAGES) || isDisc(p, label)) discApps.put(a);
+        }
+        JSObject fm = new JSObject();
+        fm.put("apps", radioApps);
+        fm.put("available", radioApps.length() > 0);
+        fm.put("hint", pm.hasSystemFeature("android.hardware.radio") ? "Toestel meldt een radiochip, maar de app is niet herkend" : "Geen radio-app van de fabrikant herkend");
+        out.put("fm", fm);
+        JSObject disc = new JSObject();
+        disc.put("apps", discApps);
+        out.put("disc", disc);
+        call.resolve(out);
+    }
+
+    private static final String[] DISC_PACKAGES = {
+        "com.syu.dvd", "com.microntek.dvd", "com.tw.dvd", "com.hct.dvd", "com.nwd.dvd", "com.ts.dvd", "com.xy.dvd",
+        "com.syu.cd", "com.microntek.cdplayer", "com.android.car.dvd", "com.qf.dvd", "com.fyt.dvd", "com.atoto.dvd"
+    };
+
+    private static boolean isKnown(String p, String[] list) { for (String s : list) if (s.equalsIgnoreCase(p)) return true; return false; }
+
+    private static boolean isRadio(String p, String label) {
+        String pl = p.toLowerCase(), l = label.toLowerCase();
+        if (pl.contains("tunein") || pl.contains("podcast") || pl.contains("klankstroom")) return false;
+        return pl.matches(".*(radio|\\.fm$|\\.fm\\.|fmplayer|tuner|\\.dab).*")
+            || l.matches(".*\\b(radio|fm|am/fm|fm/am|tuner|dab\\+?|rádio|radyo)\\b.*")
+            || label.contains("收音") || label.contains("ラジオ");
+    }
+
+    private static boolean isDisc(String p, String label) {
+        String pl = p.toLowerCase(), l = label.toLowerCase();
+        return pl.matches(".*(dvd|\\.cd$|\\.cd\\.|cdplayer|discplayer|\\.disc$|\\.disc\\.|\\.disk$).*")
+            || l.matches(".*\\b(dvd|cd|cd-speler|cd player|disc|disk|blu-?ray)\\b.*")
+            || label.contains("碟") || label.contains("光盘");
+    }
+
+    private static List<JSObject> launcherApps(Context ctx) {
+        PackageManager pm = ctx.getPackageManager();
+        Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        List<JSObject> out = new ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
+            String p = ri.activityInfo.packageName;
+            if (!seen.add(p)) continue;
             JSObject a = new JSObject();
             a.put("package", p);
-            try { ApplicationInfo ai = pm.getApplicationInfo(p, 0); a.put("label", pm.getApplicationLabel(ai).toString()); }
-            catch (Exception e) { a.put("label", "FM-radio"); }
-            apps.put(a);
+            CharSequence lb = ri.loadLabel(pm);
+            a.put("label", lb != null ? lb.toString() : p);
+            out.add(a);
         }
-        fm.put("apps", apps);
-        fm.put("available", apps.length() > 0);
-        fm.put("hint", pm.hasSystemFeature("android.hardware.radio") ? "Telefoon meldt een radiochip, maar geen bekende FM-app" : "Geen FM-app van de fabrikant gevonden");
-        out.put("fm", fm);
-        call.resolve(out);
+        java.util.Collections.sort(out, (x, y) -> x.getString("label").compareToIgnoreCase(y.getString("label")));
+        return out;
+    }
+
+    /** Alle apps met een startpictogram, om zelf de radio- of CD-app van de autoradio te kiezen. */
+    @PluginMethod
+    public void listApps(PluginCall call) {
+        JSArray arr = new JSArray();
+        for (JSObject a : launcherApps(getContext())) arr.put(a);
+        JSObject r = new JSObject();
+        r.put("apps", arr);
+        call.resolve(r);
     }
 
     @PluginMethod
