@@ -10,7 +10,7 @@
   const DEFAULTS = {
     viz: true, saver: true, saverDelay: 120, saverIdle: false,
     vizMode: 'meshgrid', vizVariant: 1, vizCycle: false, sens: 1.2, vizRes: 0.75,
-    hideBroken: true, accent: '#4fd1ff', volume: 0.8,
+    hideBroken: true, layout: 'auto', accent: '#4fd1ff', volume: 0.8,
     sources: { audius: true, archive: true, jamendo: true, subsonic: true, spotify: true }
   };
   const settings = Object.assign({}, DEFAULTS, LS.get('settings', {}));

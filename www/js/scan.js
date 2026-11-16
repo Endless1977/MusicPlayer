@@ -70,17 +70,17 @@
 
   /* snelknoppen bovenaan Radio (alleen Android) */
   function renderHwBar() {
-    const bar = K.$('#hwBar');
-    if (!bar) return;
     const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
     const h = getHw();
-    bar.innerHTML = '';
-    if (K.platform !== 'android' || !MS) return bar.classList.add('hidden');
-    for (const kind of ['radio', 'disc']) {
-      const a = h[kind];
-      if (a) bar.append(K.el('button', { class: 'chip on', onclick: () => launch(MS, a) }, KIND[kind].icon + ' ' + a.label));
+    for (const bar of K.$$('.hw-bar')) {
+      bar.innerHTML = '';
+      if (K.platform !== 'android' || !MS) { bar.classList.add('hidden'); continue; }
+      for (const kind of ['radio', 'disc']) {
+        const a = h[kind];
+        if (a) bar.append(K.el('button', { class: 'chip on', onclick: () => launch(MS, a) }, KIND[kind].icon + ' ' + a.label));
+      }
+      bar.classList.toggle('hidden', !bar.children.length);
     }
-    bar.classList.toggle('hidden', !bar.children.length);
   }
   K.on('hwapps', renderHwBar);
   setTimeout(renderHwBar, 0);

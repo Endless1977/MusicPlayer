@@ -26,6 +26,7 @@
       <button data-view="settings"><span class="ico">⚙</span><span>Instellingen</span></button>
     </nav>
     <button id="scanBtn" class="scan-btn" title="Scan lokale hardware"><span class="ico">📡</span><span>Scan hardware</span></button>
+    <div id="carHw" class="hw-bar car-only hidden"></div>
     <div id="netState" class="net-state">● online</div>
   </aside>
 
@@ -34,7 +35,7 @@
     <section id="view-radio" class="view active">
       <header class="view-head">
         <h1>Radio</h1>
-        <div id="hwBar" class="chips hidden" title="Hardware van je autoradio/telefoon"></div>
+        <div id="hwBar" class="chips hw-bar hidden" title="Hardware van je autoradio/telefoon"></div>
         <div class="toolbar">
           <input id="radioQuery" type="search" placeholder="Zoek zender (bijv. NPO, 538, jazz)…">
           <select id="radioCountry"><option value="">Alle landen</option></select>
@@ -137,6 +138,8 @@
         <label class="row"><span>Variant (kleur en vorm)</span><select id="setVizVariant"></select></label>
         <label class="switch-row"><span>Visualizer-stijl automatisch wisselen</span><input type="checkbox" id="setVizCycle"><i></i></label>
         <label class="row"><span>Gevoeligheid</span><input type="range" id="setSens" min="0.3" max="3" step="0.1"></label>
+        <label class="row"><span>Indeling</span>
+          <select id="setLayout"><option value="auto">Automatisch</option><option value="car">Autoradio (groot liggend scherm)</option><option value="normal">Standaard</option></select></label>
         <label class="row"><span>Kwaliteit (resolutie)</span>
           <select id="setVizRes"><option value="0.5">Laag (zuinig)</option><option value="0.75">Normaal</option><option value="1">Hoog</option></select></label>
         <label class="switch-row"><span>Alleen werkende zenders tonen</span><input type="checkbox" id="setHideBroken"><i></i></label>

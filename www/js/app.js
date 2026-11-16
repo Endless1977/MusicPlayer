@@ -289,7 +289,8 @@
 
   /* ---------------- VISUALIZER + SCREENSAVER ---------------- */
   const saver = $('#saver');
-  const stageVisible = () => S.viz && app.view === 'nowplaying' && !document.hidden;
+  const isCar = () => $('#app').classList.contains('car');
+  const stageVisible = () => S.viz && (app.view === 'nowplaying' || isCar()) && !document.hidden;
   const saverVisible = () => S.viz && !saver.classList.contains('hidden') && !document.hidden;
   K.viz.add($('#vizCanvas'), stageVisible);
   K.viz.add($('#saverCanvas'), saverVisible);
@@ -329,7 +330,9 @@
   $('#vizOff').addEventListener('click', () => { if (!S.viz) toggleViz(); });
   $('#saverToggle').addEventListener('click', toggleSaver);
   $('#vizFull').addEventListener('click', () => fullscreen($('#stage')));
-  $('#stage').addEventListener('dblclick', () => fullscreen($('#stage')));
+  $('#stage').addEventListener('dblclick', () => { if (!isCar()) fullscreen($('#stage')); });
+  // autoradio: één tik op de visualizer = volledig scherm aan/uit
+  $('#stage').addEventListener('click', e => { if (isCar() && (e.target.tagName === 'CANVAS' || e.target.id === 'stage')) fullscreen($('#stage')); });
   /* Volledig scherm. Op Android een eigen CSS-modus: de native WebView-fullscreen legt een
      extra laag over de app die bij de terugknop kon blijven hangen en alle tikken blokkeerde. */
   const bars = on => {
@@ -393,6 +396,72 @@
   });
   syncToggles();
   if (K.platform !== 'web') $('#dlRow').classList.add('hidden');
+
+  /* ---------------- AUTORADIO-INDELING ----------------
+     links grote knoppen · midden visualizer + speler + info · rechts lijsten */
+  const home = new Map();
+  let carCenter = null;
+  const remember = n => home.set(n, { parent: n.parentNode, next: n.nextSibling });
+  const restore = n => { const h = home.get(n); if (h) h.parent.insertBefore(n, h.next); };
+  function wantCar() {
+    if (S.layout === 'car') return true;
+    if (S.layout === 'normal') return false;
+    const w = innerWidth, h = innerHeight;
+    return K.platform === 'android' && w > h && w >= 780 && h >= 420;
+  }
+  function setLayout() {
+    const on = wantCar(), appEl = $('#app');
+    if (on === isCar()) return;
+    exitFullscreen();
+    if (on) {
+      if (!carCenter) {
+        carCenter = el('section', { id: 'carCenter' }, el('div', { id: 'carInfo' }));
+      }
+      for (const n of [$('#stage'), $('#player')]) remember(n);
+      appEl.insertBefore(carCenter, $('#main'));
+      carCenter.prepend($('#stage'), $('#player'));
+      if (!$('#carRow')) $('#player').append(el('div', { class: 'p-row', id: 'carRow' }));
+      remember($('#pFav')); remember($('.p-right'));
+      $('#carRow').append($('#pFav'), $('.p-right'));
+      appEl.classList.add('car');
+      $('#nav button[data-view=nowplaying] span:last-child').textContent = 'Wachtrij';
+      if (app.view === 'nowplaying') renderQueue();
+    } else {
+      restore($('.p-right')); restore($('#pFav'));
+      restore($('#player')); restore($('#stage'));
+      carCenter.remove();
+      appEl.classList.remove('car');
+      $('#nav button[data-view=nowplaying] span:last-child').textContent = 'Nu speelt';
+    }
+    $$('.viz3d,#vizCanvas').forEach(c => { c.width = c.width; });
+    renderCarInfo();
+  }
+  function renderCarInfo() {
+    const box = $('#carInfo');
+    if (!box || !isCar()) return;
+    const it = P.current;
+    box.innerHTML = '';
+    if (!it) { box.append(el('div', { class: 'ci-empty' }, 'Kies links een bron en rechts een zender of nummer')); return; }
+    const nxt = P.queue.length > 1 && it.kind !== 'station' ? P.queue[(P.index + 1) % P.queue.length] : null;
+    const src = { radio: 'Radio', audius: 'Audius', archive: 'Internet Archive', jamendo: 'Jamendo', subsonic: 'Eigen server', spotify: 'Spotify', local: 'Lokaal', input: 'Ingang' }[it.source] || it.source;
+    box.append(
+      coverEl(it, 'ci-noimg'),
+      el('div', { class: 'ci-text' },
+        el('div', { class: 'ci-title' }, it.title || ''),
+        el('div', { class: 'ci-artist' }, it.artist || ''),
+        it.album ? el('div', { class: 'ci-line' }, '💽 ' + it.album) : null,
+        el('div', { class: 'ci-line' }, [src, it.origin, it.codec, it.bitrate ? it.bitrate + ' kbps' : '', it.kind === 'station' ? 'live' : ''].filter(Boolean).join(' · ')),
+        nxt ? el('div', { class: 'ci-line ci-next' }, '⏭ Volgende: ' + nxt.title + (nxt.artist ? ' — ' + nxt.artist : '')) : null),
+      el('div', { class: 'ci-clock', id: 'ciClock' }, new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))
+    );
+  }
+  K.on('track', renderCarInfo);
+  K.on('queue', renderCarInfo);
+  setInterval(() => { const c = $('#ciClock'); if (c) c.textContent = new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }); }, 15000);
+  $('#setLayout').value = S.layout || 'auto';
+  $('#setLayout').addEventListener('change', e => { S.layout = e.target.value; setLayout(); });
+  window.addEventListener('resize', K.debounce(setLayout, 200));
+  setLayout();
 
   /* ---------------- sneltoetsen ---------------- */
   window.addEventListener('keydown', e => {
