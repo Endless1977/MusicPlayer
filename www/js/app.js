@@ -3,6 +3,7 @@
 (() => {
   const { $, $$, el, esc, fmtTime } = K;
   const S = K.settings, P = K.player;
+  const isCarNow = () => document.getElementById('app').classList.contains('car');
 
   /* ---------------- navigatie ---------------- */
   const app = K.app = {
@@ -176,6 +177,21 @@
   $('#musicQuery').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
 
   /* ---------------- BIBLIOTHEEK ---------------- */
+  /* Bibliotheek: als mappenbrowser (opslag → map → nummers) of als platte lijst */
+  let libPath = [];
+  const folderOf = t => {
+    if (t.path) { const parts = String(t.path).split(/[\\/]/); parts.pop(); return parts.pop() || 'Hoofdmap'; }
+    return t.album || 'Losse nummers';
+  };
+  const libFolders = () => (S.libMode || (isCarNow() ? 'folders' : 'list')) === 'folders';
+  function folderRow(name, count, onclick, iconName = 'folder') {
+    const r = el('div', { class: 'track folder' },
+      el('div', { class: 'noimg fold-ic', html: K.icon(iconName) }),
+      el('div', { class: 'tt' }, el('div', {}, name), el('div', { class: 'a' }, count + (count === 1 ? ' nummer' : ' nummers'))),
+      el('span', { class: 'badge' }, '›'), el('span'));
+    r.addEventListener('click', onclick);
+    return r;
+  }
   function renderLibrary() {
     const all = K.library.tracks;
     const f = $('#libFilter').value.trim().toLowerCase();
@@ -185,16 +201,44 @@
     sel.innerHTML = '<option value="">Alle bronnen</option>' + origins.map(o => `<option${o === cur ? ' selected' : ''}>${esc(o)}</option>`).join('');
     const list = all.filter(t => (!src || t.origin === src) && (!f || [t.title, t.artist, t.album].join(' ').toLowerCase().includes(f)));
     $('#libStats').textContent = `${all.length} nummers in je bibliotheek${list.length !== all.length ? ` · ${list.length} getoond` : ''}`;
-    const box = $('#libList');
+    const folders = libFolders();
+    $('#libMode').textContent = folders ? '☰ Lijst' : '📁 Mappen';
+    const box = $('#libList'), crumbs = $('#libCrumbs');
     box.innerHTML = '';
+    crumbs.classList.toggle('hidden', !folders || !!f || !all.length);
     if (!all.length) {
       box.append(el('div', { class: 'empty' }, 'Nog geen lokale muziek. Gebruik “Map toevoegen” of de knop 📡 Scan hardware.'));
       return;
     }
     const frag = document.createDocumentFragment();
-    list.slice(0, 2000).forEach(t => frag.append(trackRow(t, list, { remove: it => K.library.remove(it.id) })));
+    if (folders && !f) {
+      // kruimelpad
+      crumbs.innerHTML = '';
+      const parts = ['Bibliotheek', ...libPath];
+      parts.forEach((p, i) => {
+        if (i) crumbs.append(el('span', { class: 'sep' }, '›'));
+        crumbs.append(el('button', { class: i === parts.length - 1 ? 'on' : '', onclick: () => { libPath = libPath.slice(0, i); renderLibrary(); } }, p));
+      });
+      const group = (arr, key) => { const m = new Map(); for (const t of arr) { const k = key(t); if (!m.has(k)) m.set(k, []); m.get(k).push(t); } return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])); };
+      if (libPath.length === 0) {
+        const gs = group(list, t => t.origin || 'Overig');
+        if (gs.length === 1) libPath = [gs[0][0]];
+        else gs.forEach(([o, ts]) => frag.append(folderRow(o, ts.length, () => { libPath = [o]; renderLibrary(); }, /sd|usb|cd/i.test(o) ? 'usb' : 'folder')));
+      }
+      if (libPath.length === 1) {
+        const inO = list.filter(t => (t.origin || 'Overig') === libPath[0]);
+        frag.append(el('div', { class: 'track play-all', onclick: () => P.play(inO[0], inO) }, el('div', { class: 'noimg fold-ic', html: K.icon('play') }), el('div', { class: 'tt' }, el('div', {}, 'Alles afspelen'), el('div', { class: 'a' }, inO.length + ' nummers')), el('span'), el('span')));
+        group(inO, folderOf).forEach(([d, ts]) => frag.append(folderRow(d, ts.length, () => { libPath = [libPath[0], d]; renderLibrary(); })));
+      } else if (libPath.length === 2) {
+        const inF = list.filter(t => (t.origin || 'Overig') === libPath[0] && folderOf(t) === libPath[1]);
+        inF.forEach(t => frag.append(trackRow(t, inF, { remove: it => K.library.remove(it.id) })));
+        if (!inF.length) { libPath = []; return renderLibrary(); }
+      }
+    } else list.slice(0, 2000).forEach(t => frag.append(trackRow(t, list, { remove: it => K.library.remove(it.id) })));
     box.append(frag);
   }
+  $('#libMode').addEventListener('click', () => { S.libMode = libFolders() ? 'list' : 'folders'; renderLibrary(); });
+  $('#openAccounts').addEventListener('click', () => app.show('accounts'));
   K.on('library', () => { if (app.view === 'library') renderLibrary(); });
   $('#libFilter').addEventListener('input', K.debounce(renderLibrary, 200));
   $('#libSource').addEventListener('change', renderLibrary);
@@ -398,66 +442,168 @@
   if (K.platform !== 'web') $('#dlRow').classList.add('hidden');
 
   /* ---------------- AUTORADIO-INDELING ----------------
-     links grote knoppen · midden visualizer + speler + info · rechts lijsten */
+     statusbalk · links tegels · midden visualizer + bronnen + spelerkaart · rechts bestanden/lijsten · onderbalk */
+  const I = K.icon;
   const home = new Map();
-  let carCenter = null;
+  let car = null;
   const remember = n => home.set(n, { parent: n.parentNode, next: n.nextSibling });
   const restore = n => { const h = home.get(n); if (h) h.parent.insertBefore(n, h.next); };
+  const clock = () => new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  const today = () => new Date().toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
   function wantCar() {
     if (S.layout === 'car') return true;
     if (S.layout === 'normal') return false;
     const w = innerWidth, h = innerHeight;
     return K.platform === 'android' && w > h && w >= 780 && h >= 420;
   }
+  const btnI = (cls, icon, label, onclick, extra = {}) =>
+    el('button', { class: cls, onclick, ...extra, html: I(icon) + (label ? `<span>${esc(label)}</span>` : '') });
+
+  function goBack() {
+    if (!saver.classList.contains('hidden')) return closeSaver();
+    if (isFullscreen()) return exitFullscreen();
+    if ($('#scanDialog').open) return $('#scanDialog').close();
+    if (app.view === 'library' && libPath.length) { libPath.pop(); return renderLibrary(); }
+    if (app.view !== 'radio') return app.show('radio');
+  }
+
+  function buildCar() {
+    const tiles = [
+      ['media', 'music', 'Media', () => app.show('radio')],
+      ['search', 'search', 'Zoeken', () => app.show('search')],
+      ['favorites', 'star', 'Favorieten', () => app.show('favorites')],
+      ['settings', 'gear', 'Instellingen', () => app.show('settings')]
+    ];
+    const tabs = [
+      ['radio', 'tower', 'Radio', () => app.show('radio')],
+      ['fm', 'fm', 'FM', () => K.scan.hw('radio')],
+      ['cd', 'disc', 'CD', () => K.scan.hw('disc')],
+      ['library', 'usb', 'USB/SD', () => app.show('library')],
+      ['nowplaying', 'queue', 'Wachtrij', () => app.show('nowplaying')]
+    ];
+    car = {
+      status: el('header', { id: 'carStatus' },
+        btnI('cs-btn', 'home', '', () => app.show('radio'), { title: 'Home' }),
+        el('span', { class: 'cs-sep' }),
+        el('span', { class: 'cs-clock', id: 'csClock' }, clock()),
+        el('span', { class: 'cs-sep' }),
+        el('span', { class: 'cs-net', id: 'csNet', html: I('wifi') }),
+        el('span', { class: 'cs-title' }, 'Klankstroom'),
+        el('span', { class: 'cs-date', id: 'csDate' }, today()),
+        el('span', { class: 'cs-sep' }),
+        btnI('cs-btn', 'scan', '', () => K.scan.run(), { title: 'Scan hardware' }),
+        el('span', { class: 'cs-sep' }),
+        btnI('cs-btn', 'back', '', goBack, { title: 'Terug' })),
+      tiles: el('nav', { id: 'carTiles' }, ...tiles.map(([id, ic, lb, fn]) => btnI('tile', ic, lb, fn, { 'data-tile': id }))),
+      center: el('section', { id: 'carCenter' }),
+      tabs: el('div', { id: 'carTabs' }, ...tabs.map(([id, ic, lb, fn]) => btnI('tab', ic, lb, fn, { 'data-tab': id }))),
+      card: el('div', { id: 'carCard' },
+        el('div', { class: 'cc-cover', id: 'ccCover' }),
+        el('div', { class: 'cc-main' },
+          el('div', { class: 'cc-head' },
+            el('div', { class: 'cc-titles' }, el('div', { class: 'cc-title', id: 'ccTitle' }, 'Klankstroom'), el('div', { class: 'cc-sub', id: 'ccSub' }, 'Kies rechts een zender of nummer')),
+            el('div', { class: 'cc-badges', id: 'ccBadges' })),
+          el('div', { class: 'cc-prog' },
+            el('input', { type: 'range', id: 'ccSeek', min: 0, max: 1000, value: 0 }),
+            el('div', { class: 'cc-times' }, el('span', { id: 'ccTime' }, '0:00'), el('span', { id: 'ccDur' }, 'LIVE'))),
+          el('div', { class: 'cc-ctrl' },
+            btnI('rnd', 'prev', '', () => P.prev(), { title: 'Vorige' }),
+            btnI('rnd big', 'play', '', () => P.current ? P.toggle() : K.toast('Kies eerst een zender of nummer'), { id: 'ccPlay', title: 'Afspelen/pauze' }),
+            btnI('rnd', 'next', '', () => P.next(), { title: 'Volgende' })))),
+      info: el('div', { id: 'carInfo' }),
+      bottom: el('footer', { id: 'carBottom' },
+        el('div', { class: 'cb-brand' }, el('img', { src: 'icons/wapen.svg', alt: '' }), el('span', {}, 'Klankstroom')),
+        el('div', { class: 'cb-btns' },
+          btnI('cb', 'shuffle', 'Shuffle', () => $('#pShuffle').click(), { id: 'cbShuffle' }),
+          btnI('cb', 'repeat', 'Herhalen', () => $('#pRepeat').click(), { id: 'cbRepeat' }),
+          btnI('cb', 'star', 'Favoriet', () => $('#pFav').click(), { id: 'cbFav' }),
+          btnI('cb', 'wave', 'Visualizer', toggleViz, { id: 'cbViz' }),
+          btnI('cb', 'monitor', 'Screensaver', toggleSaver, { id: 'cbSaver' }),
+          el('div', { class: 'cb vol' },
+            el('button', { class: 'cb-mute', id: 'cbMute', onclick: () => P.toggleMute(), html: I('volume') }),
+            el('input', { type: 'range', id: 'cbVol', min: 0, max: 1, step: .01, value: S.volume }))))
+    };
+    $('#ccSeek', car.card).addEventListener('input', e => { seeking = true; setProg(e.target.value / 10); });
+    $('#ccSeek', car.card).addEventListener('change', e => { seeking = false; P.seek(e.target.value / 1000); });
+    $('#cbVol', car.bottom).addEventListener('input', e => { P.setVolume(+e.target.value); $('#pVol').value = e.target.value; });
+  }
+
   function setLayout() {
     const on = wantCar(), appEl = $('#app');
     if (on === isCar()) return;
     exitFullscreen();
     if (on) {
-      if (!carCenter) {
-        carCenter = el('section', { id: 'carCenter' }, el('div', { id: 'carInfo' }));
-      }
-      for (const n of [$('#stage'), $('#player')]) remember(n);
-      appEl.insertBefore(carCenter, $('#main'));
-      carCenter.prepend($('#stage'), $('#player'));
-      if (!$('#carRow')) $('#player').append(el('div', { class: 'p-row', id: 'carRow' }));
-      remember($('#pFav')); remember($('.p-right'));
-      $('#carRow').append($('#pFav'), $('.p-right'));
+      if (!car) buildCar();
+      remember($('#stage')); remember($('#miniViz'));
+      appEl.prepend(car.status);
+      appEl.append(car.tiles, car.center, car.bottom);
+      car.center.append($('#stage'), car.tabs, car.card, car.info);
+      $('#stage').append($('#miniViz'));
+      $('#miniViz').width = 90; $('#miniViz').height = 56;
       appEl.classList.add('car');
-      $('#nav button[data-view=nowplaying] span:last-child').textContent = 'Wachtrij';
-      if (app.view === 'nowplaying') renderQueue();
+      document.body.classList.add('car-body');
     } else {
-      restore($('.p-right')); restore($('#pFav'));
-      restore($('#player')); restore($('#stage'));
-      carCenter.remove();
+      restore($('#miniViz')); restore($('#stage'));
+      $('#miniViz').width = 120; $('#miniViz').height = 32;
+      for (const k of ['status', 'tiles', 'center', 'bottom']) car[k].remove();
       appEl.classList.remove('car');
-      $('#nav button[data-view=nowplaying] span:last-child').textContent = 'Nu speelt';
+      document.body.classList.remove('car-body');
     }
-    $$('.viz3d,#vizCanvas').forEach(c => { c.width = c.width; });
-    renderCarInfo();
+    if (app.view === 'library') renderLibrary();
+    updateCar();
   }
-  function renderCarInfo() {
-    const box = $('#carInfo');
-    if (!box || !isCar()) return;
-    const it = P.current;
-    box.innerHTML = '';
-    if (!it) { box.append(el('div', { class: 'ci-empty' }, 'Kies links een bron en rechts een zender of nummer')); return; }
-    const nxt = P.queue.length > 1 && it.kind !== 'station' ? P.queue[(P.index + 1) % P.queue.length] : null;
-    const src = { radio: 'Radio', audius: 'Audius', archive: 'Internet Archive', jamendo: 'Jamendo', subsonic: 'Eigen server', spotify: 'Spotify', local: 'Lokaal', input: 'Ingang' }[it.source] || it.source;
-    box.append(
-      coverEl(it, 'ci-noimg'),
-      el('div', { class: 'ci-text' },
-        el('div', { class: 'ci-title' }, it.title || ''),
-        el('div', { class: 'ci-artist' }, it.artist || ''),
-        it.album ? el('div', { class: 'ci-line' }, '💽 ' + it.album) : null,
-        el('div', { class: 'ci-line' }, [src, it.origin, it.codec, it.bitrate ? it.bitrate + ' kbps' : '', it.kind === 'station' ? 'live' : ''].filter(Boolean).join(' · ')),
-        nxt ? el('div', { class: 'ci-line ci-next' }, '⏭ Volgende: ' + nxt.title + (nxt.artist ? ' — ' + nxt.artist : '')) : null),
-      el('div', { class: 'ci-clock', id: 'ciClock' }, new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))
-    );
+
+  function updateCar() {
+    if (!car || !isCar()) return;
+    const it = P.current, v = app.view;
+    const tileOf = { radio: 'media', library: 'media', nowplaying: 'media', search: 'search', favorites: 'favorites', settings: 'settings', accounts: 'settings' };
+    car.tiles.querySelectorAll('.tile').forEach(b => b.classList.toggle('on', b.dataset.tile === tileOf[v]));
+    car.tabs.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === v));
+    // spelerkaart
+    const cov = $('#ccCover'); cov.innerHTML = '';
+    if (it) cov.append(coverEl(it, 'cc-noimg')); else cov.append(el('img', { src: 'icons/wapen.svg', alt: '', class: 'cc-logo' }));
+    $('#ccTitle').textContent = it ? it.title || '' : 'Klankstroom';
+    $('#ccSub').textContent = it ? [it.artist, it.album].filter(Boolean).join(' — ') : 'Kies rechts een zender of nummer';
+    const b = $('#ccBadges'); b.innerHTML = '';
+    if (it) {
+      if (it.kind === 'station') b.append(el('span', { class: 'bdg live' }, 'LIVE'));
+      if (it.codec) b.append(el('span', { class: 'bdg' }, it.codec));
+      if (it.bitrate) b.append(el('span', { class: 'bdg' }, it.bitrate + ' kbps'));
+    }
+    $('#ccSeek').disabled = !it || it.kind === 'station';
+    $('#ccPlay').innerHTML = I(P.playing ? 'pause' : 'play');
+    // info onder de kaart
+    const nxt = it && P.queue.length > 1 && it.kind !== 'station' ? P.queue[(P.index + 1) % P.queue.length] : null;
+    const src = it && ({ radio: 'Internetradio', audius: 'Audius', archive: 'Internet Archive', jamendo: 'Jamendo', subsonic: 'Eigen server', spotify: 'Spotify', local: 'Lokaal', input: 'Ingang' }[it.source] || it.source);
+    car.info.innerHTML = '';
+    car.info.append(el('div', { class: 'ci-line' }, it ? [src, it.origin, folderOfSafe(it)].filter(Boolean).join(' · ') : 'Tik op FM of CD om de radio of CD-speler van je auto te openen'));
+    if (nxt) car.info.append(el('div', { class: 'ci-line ci-next' }, '⏭ Volgende: ' + nxt.title + (nxt.artist ? ' — ' + nxt.artist : '')));
+    if (!it || it.kind === 'station') setProg(it ? 100 : 0);
+    // onderbalk-toestanden
+    $('#cbShuffle').classList.toggle('on', P.shuffle);
+    $('#cbRepeat').classList.toggle('on', P.repeat !== 'off');
+    $('#cbFav').classList.toggle('on', !!(it && K.favs.isFav(it)));
+    $('#cbViz').classList.toggle('on', S.viz);
+    $('#cbSaver').classList.toggle('on', S.saver);
+    $('#cbMute').innerHTML = I(P.muted ? 'mute' : 'volume');
+    $('#cbVol').value = S.volume;
+    $('#csNet').innerHTML = I(navigator.onLine ? 'wifi' : 'nowifi');
+    $('#csNet').classList.toggle('off', !navigator.onLine);
   }
-  K.on('track', renderCarInfo);
-  K.on('queue', renderCarInfo);
-  setInterval(() => { const c = $('#ciClock'); if (c) c.textContent = new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }); }, 15000);
+  const setProg = pct => { const s = $('#ccSeek'); if (s) s.style.setProperty('--p', pct.toFixed(1) + '%'); };
+  const folderOfSafe = it => it.source === 'local' ? folderOf(it) : '';
+  for (const ev of ['track', 'state', 'queue', 'favs', 'setting', 'mute']) K.on(ev, updateCar);
+  K.on('time', ({ t, d }) => {
+    if (!isCar()) return;
+    $('#ccTime').textContent = fmtTime(t).replace('LIVE', '0:00');
+    if (isFinite(d) && d > 0) { $('#ccDur').textContent = fmtTime(d); if (!seeking) { $('#ccSeek').value = (t / d) * 1000; setProg(t / d * 100); } }
+    else { $('#ccDur').textContent = 'LIVE'; setProg(100); }
+  });
+  ['pShuffle', 'pRepeat'].forEach(id => $('#' + id).addEventListener('click', () => setTimeout(updateCar)));
+  window.addEventListener('online', updateCar); window.addEventListener('offline', updateCar);
+  setInterval(() => { const c = $('#csClock'); if (c) { c.textContent = clock(); $('#csDate').textContent = today(); } }, 10000);
+  const _show = app.show;
+  app.show = v => { _show(v); updateCar(); };
   $('#setLayout').value = S.layout || 'auto';
   $('#setLayout').addEventListener('change', e => { S.layout = e.target.value; setLayout(); });
   window.addEventListener('resize', K.debounce(setLayout, 200));

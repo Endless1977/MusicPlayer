@@ -154,7 +154,24 @@
     body.append(...parts);
   }
 
-  K.scan = { run };
+  /* Tabbladen FM / CD in de autoradio-indeling: open de gekozen app, of laat er een kiezen */
+  async function hw(kind) {
+    const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+    if (!MS || K.platform !== 'android') return K.toast('Werkt in de Android-app op je autoradio');
+    const a = getHw()[kind];
+    if (a) return launch(MS, a);
+    if (!dlg.open) dlg.showModal();
+    // eerst automatisch zoeken; niets gevonden → zelf kiezen
+    body.innerHTML = '<div class="loader">Zoeken naar de ' + KIND[kind].name + '-app…</div>';
+    try {
+      const r = await MS.scan();
+      const found = kind === 'radio' ? r.fm.apps : ((r.disc && r.disc.apps) || []);
+      if (found.length === 1) { setHw(kind, found[0]); dlg.close(); return launch(MS, found[0]); }
+      if (found.length > 1) { body.innerHTML = ''; body.append(...hwSection(MS, kind, 'Welke ' + KIND[kind].name + '-app?', found, 'Gevonden op dit apparaat.', '')); return; }
+    } catch {}
+    pickApp(MS, kind);
+  }
+  K.scan = { run, hw };
   K.$('#scanBtn').addEventListener('click', run);
   K.$('#scanClose').addEventListener('click', () => dlg.close());
 })();

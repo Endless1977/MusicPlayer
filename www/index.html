@@ -80,12 +80,14 @@
           <button id="addFiles">Bestanden toevoegen</button>
           <input id="libFilter" type="search" placeholder="Filter…">
           <select id="libSource"><option value="">Alle bronnen</option></select>
+          <button id="libMode" title="Mappen of lijst">📁 Mappen</button>
           <button id="libClear" class="ghost danger">Leegmaken</button>
         </div>
         <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
         <input id="filesInput" type="file" accept="audio/*,.mp3,.flac,.ogg,.m4a,.wav,.opus,.aac" multiple hidden>
       </header>
       <div id="libStats" class="hint"></div>
+      <div id="libCrumbs" class="crumbs hidden"></div>
       <div id="libList" class="tracklist"></div>
     </section>
 
@@ -144,6 +146,7 @@
           <select id="setVizRes"><option value="0.5">Laag (zuinig)</option><option value="0.75">Normaal</option><option value="1">Hoog</option></select></label>
         <label class="switch-row"><span>Alleen werkende zenders tonen</span><input type="checkbox" id="setHideBroken"><i></i></label>
         <label class="row"><span>Thema-accent</span><input type="color" id="setAccent"></label>
+        <div class="row"><span>Accounts (Spotify, eigen server, Jamendo)</span><button id="openAccounts">Accounts koppelen</button></div>
         <div class="row" id="dlRow"><span>App downloaden</span><span class="btns" style="display:flex;gap:8px;flex-wrap:wrap">
           <a class="chip" href="https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom.apk">⬇ Android (.apk)</a>
           <a class="chip" href="https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom-Setup.exe">⬇ Windows</a></span></div>
@@ -209,6 +212,7 @@
 <script src="js/accounts.js"></script>
 <script src="js/library.js"></script>
 <script src="js/scan.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/app.js"></script>
 <script type="module" src="js/viz3d.js"></script>
 </body>
