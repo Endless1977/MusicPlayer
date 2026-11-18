@@ -1,5 +1,5 @@
 /* Klankstroom — service worker: app-schil offline beschikbaar (browser/PWA) */
-const CACHE = 'klankstroom-v10';
+const CACHE = 'klankstroom-v11';
 const SHELL = ['./', 'index.html', 'style.css', 'manifest.json', 'icons/wapen.svg', 'icons/icon-192.png', 'icons/icon-512.png',
   'vendor/hls.min.js', 'js/util.js', 'js/storage.js', 'js/id3.js', 'js/md5.js', 'js/player.js', 'js/visualizer.js',
   'js/viz3d.js', 'vendor/three/three.module.js', 'vendor/three/postprocessing/EffectComposer.js', 'vendor/three/postprocessing/RenderPass.js',

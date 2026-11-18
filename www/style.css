@@ -329,3 +329,44 @@ body.car-body{background:#01040c}
 .cb-mute{background:none;border:0;padding:4px;color:#fff;font-size:clamp(24px,5vh,36px)}
 #cbVol{flex:1;min-width:50px;accent-color:var(--neon2)}
 #app.car #toast{bottom:calc(var(--sab) + 110px)}
+
+/* ---- staande variant (telefoon) van de autoradio-indeling ---- */
+#app.car.portrait{grid-template-columns:minmax(0,1fr);grid-template-rows:46px auto minmax(0,1fr) auto auto;gap:8px;padding:calc(6px + var(--sat)) calc(8px + var(--sar)) calc(6px + var(--sab)) calc(8px + var(--sal));border-radius:0;border-width:0}
+#app.car.portrait #carStatus{grid-row:1;font-size:20px;gap:10px;padding:0 6px}
+#app.car.portrait .cs-btn{font-size:26px}
+#app.car.portrait .cs-net{font-size:22px}
+#app.car.portrait .cs-date{font-size:15px}
+#app.car.portrait #carCenter{grid-column:1;grid-row:2;gap:8px}
+#app.car.portrait #stage{flex:none;height:17vh;min-height:90px}
+#app.car.portrait #carTabs .tab{font-size:14px;min-height:46px;gap:6px}
+#app.car.portrait #carTabs .tab .ic{font-size:22px}
+#app.car.portrait #carCard{flex:none;padding:10px 12px;gap:12px;flex-wrap:wrap}
+#app.car.portrait .cc-cover{height:76px;margin:0;align-self:center}
+#app.car.portrait .cc-main{min-width:0;flex:1 1 0}
+#app.car.portrait .cc-title{font-size:21px}
+#app.car.portrait .cc-sub{font-size:15px}
+#app.car.portrait .bdg{font-size:11px}
+#app.car.portrait .bdg-sig{font-size:18px}
+#app.car.portrait .cc-times{font-size:13px}
+#app.car.portrait .cc-prog input{height:24px}
+#app.car.portrait .cc-ctrl{gap:28px;margin-top:2px}
+#app.car.portrait .rnd{width:50px;height:50px;font-size:22px}
+#app.car.portrait .rnd.big{width:64px;height:64px;font-size:28px}
+#app.car.portrait #carPanel{grid-column:1;grid-row:3}
+#app.car.portrait .b-head{font-size:20px;padding:8px 12px}
+#app.car.portrait .b-row{font-size:17px;min-height:52px}
+#app.car.portrait .b-card{display:none}
+#app.car.portrait .b-list{padding-bottom:10px}
+#app.car.portrait #carTiles{grid-column:1;grid-row:4;flex-direction:row;gap:6px}
+#app.car.portrait #carTiles .tile{min-height:58px;font-size:12px;border-radius:14px;gap:2px}
+#app.car.portrait #carTiles .tile .ic{font-size:24px}
+#app.car.portrait #carBottom{grid-row:5;border-radius:14px}
+#app.car.portrait .cb-deco{display:none}
+#app.car.portrait .cb-btns{flex:1;border-radius:14px;border-bottom:2px solid rgba(42,168,255,.75)}
+#app.car.portrait .cb{min-width:0;flex:1;padding:6px 2px;font-size:10px}
+#app.car.portrait .cb .ic{font-size:20px}
+#app.car.portrait .cb .sw{display:none}
+#app.car.portrait .cb.vol{flex:1.6;min-width:0;padding:0 6px}
+#app.car.portrait .cb-mute{font-size:22px}
+#app.car.portrait #toast{bottom:calc(var(--sab) + 150px)}
+#app.car.portrait .cc-noimg{font-size:26px}

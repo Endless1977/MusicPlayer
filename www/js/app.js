@@ -454,8 +454,9 @@
   function wantCar() {
     if (S.layout === 'car') return true;
     if (S.layout === 'normal') return false;
+    // nieuwe indeling is standaard: liggend (pc, tablet, autoradio) én staand (telefoon, eigen variant)
     const w = innerWidth, h = innerHeight;
-    return K.platform === 'android' && w > h && w >= 780 && h >= 420;
+    return h > w ? w >= 320 : (w >= 700 && h >= 380);
   }
   const btnI = (cls, icon, label, onclick, extra = {}) =>
     el('button', { class: cls, onclick, ...extra, html: I(icon) + (label ? `<span>${esc(label)}</span>` : '') });
@@ -658,6 +659,7 @@
 
   function setLayout() {
     const on = wantCar(), appEl = $('#app');
+    appEl.classList.toggle('portrait', on && innerHeight > innerWidth);
     if (on === isCar()) return;
     exitFullscreen();
     if (on) {
