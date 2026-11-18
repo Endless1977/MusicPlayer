@@ -3,6 +3,7 @@
 (() => {
   /* 3D-scènes (vizz.fm-stijl, zie viz3d.js) + klassieke 2D-feedbackeffecten (Drempels/Milkdrop-stijl) */
   const MODES = [
+    { id: 'mountains', name: '3D · Neon-bergen', three: true },
     { id: 'meshgrid', name: '3D · Mesh Grid', three: true },
     { id: 'sphere', name: '3D · Pulserende bol', three: true },
     { id: 'tunnel', name: '3D · Audiotunnel', three: true },
@@ -254,6 +255,21 @@
     const w = mini.width, h = mini.height;
     mctx.clearRect(0, 0, w, h);
     if (!K.settings.viz) return;
+    if (document.getElementById('app').classList.contains('car')) {
+      // autoradio: blokjesmeter groen → geel → oranje
+      const bars = 6, seg = 9, bw = w / bars, sh = h / seg;
+      for (let i = 0; i < bars; i++) {
+        const lvl = Math.round(Math.min(1, audioTex[Math.floor(8 + i * 30)] / 230 * (K.player.playing ? 1 : .2)) * seg);
+        for (let s = 0; s < seg; s++) {
+          const f = s / (seg - 1);
+          mctx.fillStyle = f < .45 ? '#2fe36a' : f < .75 ? '#e8e83a' : '#ff9a1a';
+          mctx.globalAlpha = s < lvl ? 1 : .12;
+          mctx.fillRect(i * bw + 1.5, h - (s + 1) * sh + 1, bw - 3, sh - 2);
+        }
+      }
+      mctx.globalAlpha = 1;
+      return;
+    }
     const bars = 24, bw = w / bars;
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4fd1ff';
     mctx.fillStyle = accent;

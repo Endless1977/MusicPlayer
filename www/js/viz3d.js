@@ -43,6 +43,9 @@ function norm(c, target) {
 }
 /* 16 varianten: kleurenpaar + vormparameter */
 function palette(v, baseHue) {
+  if (v === 1 && baseHue > .4 && baseHue < .7) {   // standaard: cyaan → blauw (zoals het autoradio-voorbeeld)
+    return { a: norm(new THREE.Color().setHSL(.53, .95, .55), .32), b: norm(new THREE.Color().setHSL(.6, .95, .6), .26), style: 0, alt: 0 };
+  }
   const h = (baseHue + (v - 1) * 0.0625) % 1;
   const a = norm(new THREE.Color().setHSL(h, 0.85, 0.55), .28);
   const b = norm(new THREE.Color().setHSL((h + (v % 2 ? 0.18 : 0.42)) % 1, 0.9, 0.6), .34);
@@ -283,6 +286,51 @@ const SCENES = {
     pts.frustumCulled = false; scene.add(pts);
     cam.position.set(0, 7, 9); cam.lookAt(0, 0, 0);
     return { update(t, f) { setCommon(u, t, f); pts.rotation.x = Math.sin(t * .07) * .25; cam.position.y = 6 + Math.sin(t * .1) * 2; cam.lookAt(0, 0, 0); } };
+  } },
+  /* Neon-bergen: cyaan rasterlandschap met pieken op de muziek (zoals op het autoradio-voorbeeld) */
+  mountains: { name: 'Neon-bergen', hue: 0.53, bloom: .6, build(scene, cam, v) {
+    const p = v === 1 ? { a: new THREE.Color(0x29e6ff), b: new THREE.Color(0x1b4dff), style: 0, alt: 0 } : palette(v, this.hue);
+    const u = commonUniforms(); u.uA.value = p.a; u.uB.value = p.b; u.uStyle.value = p.style;
+    const NX = 64, NZ = 16, W = 52, D = 18;
+    const pos = new Float32Array((NX + 1) * (NZ + 1) * 3), idx = [];
+    for (let j = 0; j <= NZ; j++) for (let i = 0; i <= NX; i++) {
+      const k = j * (NX + 1) + i;
+      pos.set([(i / NX - .5) * W, 0, -(j / NZ) * D], k * 3);
+      if (i < NX) idx.push(k, k + 1);
+      if (j < NZ) idx.push(k, k + NX + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
+    const vs = `uniform sampler2D uSpec; uniform float uTime, uBass, uMid; varying float vH; varying float vZ;
+      float sp(float x){ return texture2D(uSpec, vec2(x, .25)).r; }
+      void main(){
+        vec3 q = position;
+        float u = q.x / ${W}. + .5, d = -q.z / ${D}.;
+        float env = exp(-pow((d - .45) / .32, 2.));
+        float h = 0.;
+        h += (.35 + sp(.03)) * exp(-pow((u - .18) / .09, 2.));
+        h += (.30 + sp(.10)) * exp(-pow((u - .42) / .10, 2.));
+        h += (.30 + sp(.22)) * exp(-pow((u - .66) / .09, 2.));
+        h += (.25 + sp(.38)) * exp(-pow((u - .88) / .07, 2.));
+        h *= 7.5 * env;
+        h += .35 * sin(q.x * .55 + uTime * 1.2) * sin(q.z * .7 - uTime * .8) * (.4 + uBass);
+        q.y = h; vH = h; vZ = d;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(q, 1.);
+      }`;
+    const fs = `uniform vec3 uA, uB; uniform float uBeat; varying float vH; varying float vZ;
+      void main(){ vec3 c = mix(uB, uA, clamp(vH / 5., 0., 1.)) * (.22 + clamp(vH / 4., 0., 1.) * .55 + uBeat * .1);
+        c *= smoothstep(1., .55, vZ) * (.55 + .45 * smoothstep(0., .25, vZ));
+        gl_FragColor = vec4(c, 1.); }`;
+    const grid = new THREE.LineSegments(g, new THREE.ShaderMaterial({ uniforms: u, vertexShader: vs, fragmentShader: fs, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    grid.frustumCulled = false; scene.add(grid);
+    // sterren
+    const N = 700, sp = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) sp.set([(Math.random() - .5) * 90, 2 + Math.random() * 22, -10 - Math.random() * 30], i * 3);
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x9fdcff, size: .09, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    scene.add(stars);
+    cam.position.set(0, 3.2, 10.5); cam.lookAt(0, 3.4, -10);
+    return { update(t, f) { setCommon(u, t, f); stars.material.opacity = .35 + f.treb * .5; cam.position.x = Math.sin(t * .08) * 1.5; cam.lookAt(0, 3.4, -10); } };
   } },
   /* Straaljager: vliegt op de muziek links/rechts (toonhoogte) en omhoog/omlaag (bas), met lichtstralen achter de vleugeltips */
   jet: { name: 'Straaljager', hue: 0.52, bloom: 1.2, build(scene, cam, v) {
@@ -645,7 +693,7 @@ K.viz3d = {
       vw.ctrl = SCENES[id].build(vw.scene, vw.camera, variant);
       vw.renderPass.scene = vw.scene;
       vw.baseBloom = SCENES[id].bloom;
-      vw.trails.uniforms.damp.value = { tunnel: .55, meshgrid: .55, jet: .45, car: .4, hound: .2 }[id] ?? .75;
+      vw.trails.uniforms.damp.value = { tunnel: .55, meshgrid: .55, mountains: .35, jet: .45, car: .4, hound: .2 }[id] ?? .75;
       vw.key = key;
     }
     updateAudioTextures(now);

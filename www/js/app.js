@@ -442,7 +442,8 @@
   if (K.platform !== 'web') $('#dlRow').classList.add('hidden');
 
   /* ---------------- AUTORADIO-INDELING ----------------
-     statusbalk · links tegels · midden visualizer + bronnen + spelerkaart · rechts bestanden/lijsten · onderbalk */
+     Naar het voorbeeld: statusbalk · tegels (Navigatie/Media/Telefoon/Instellingen) ·
+     visualizer + tabbladen (Radio/CD/USB/Stream) + spelerkaart · bladerlijst "Bestanden" · onderbalk */
   const I = K.icon;
   const home = new Map();
   let car = null;
@@ -458,71 +459,198 @@
   }
   const btnI = (cls, icon, label, onclick, extra = {}) =>
     el('button', { class: cls, onclick, ...extra, html: I(icon) + (label ? `<span>${esc(label)}</span>` : '') });
+  const sw = id => el('span', { class: 'sw', id });
+
+  /* ---------- bladerlijst (rechts) ---------- */
+  const GENRES = [['Pop', 'pop'], ['Rock', 'rock'], ['Dance', 'dance'], ['Jazz', 'jazz'], ['Klassiek', 'classical'], ['Hiphop', 'hiphop'],
+    ['80s', '80s'], ['90s', '90s'], ['Nieuws', 'news'], ['Chillout', 'chillout'], ['Lofi', 'lofi'], ['Metal', 'metal'], ['Soul', 'soul'], ['Country', 'country'], ['Oldies', 'oldies']];
+  const B = { tab: 'radio', stack: [], q: '', searching: false, page: null };   // stack: [{ title, load }]
+
+  const rowsFolder = (title, sub, open, icon = 'folder') => ({ icon, title, sub, chev: true, onclick: open });
+  const stationRow = (it, list) => ({ img: it.cover, icon: 'tower', title: it.title, sub: it.artist, badge: it.bitrate ? it.bitrate + ' kbps' : '', item: it, fav: true, onclick: () => P.play(it, list) });
+  const trackRowB = (it, list) => ({ img: it.cover, icon: 'note', title: it.title || 'Onbekend', sub: [it.artist, it.album].filter(Boolean).join(' — '), badge: it.duration ? fmtTime(it.duration) : '', item: it, fav: true,
+    onclick: () => P.play(it, list) });
+  const albumRow = it => rowsFolder(it.title, it.artist || 'Album', () => openFolder(it.title, async () => { const ts = await K.sources.expand(it); return ts.map(t => trackRowB(t, ts)); }));
+
+  function openFolder(title, load) { B.stack.push({ title, load }); B.q = ''; B.searching = false; renderBrowser(); }
+  function browserBack() { if (B.page) { B.page = null; renderBrowser(); return true; } if (B.searching) { B.searching = false; B.q = ''; renderBrowser(); return true; } if (B.stack.length) { B.stack.pop(); renderBrowser(); return true; } return false; }
+
+  const ROOT = {
+    radio: { title: 'Radio', load: async () => {
+      const rows = [];
+      if (K.platform === 'android') rows.push({ icon: 'fm', title: 'FM/AM-tuner van de auto', sub: (K.scan.getHw().radio || {}).label || 'Radio-app van je autoradio openen', chev: true, onclick: () => K.scan.hw('radio') });
+      rows.push(rowsFolder('Favoriete zenders', K.favs.stations.length + ' zenders', () => openFolder('Favoriete zenders', async () => K.favs.stations.map(s => stationRow(s, K.favs.stations))), 'star'));
+      rows.push(rowsFolder('Populair in Nederland', 'Meest beluisterd', () => openFolder('Populair in Nederland', async () => { const l = await K.radio.search({ country: 'NL' }); return l.map(s => stationRow(s, l)); })));
+      rows.push(rowsFolder('Populair wereldwijd', 'Meest beluisterd', () => openFolder('Wereldwijd', async () => { const l = await K.radio.search({ country: '' }); return l.map(s => stationRow(s, l)); })));
+      for (const [n, tag] of GENRES) rows.push(rowsFolder(n, 'Genre', () => openFolder(n, async () => { const l = await K.radio.search({ tag, country: '' }); return l.map(s => stationRow(s, l)); })));
+      return rows;
+    }, search: async q => { const l = await K.radio.search({ name: q, country: '' }); return l.map(s => stationRow(s, l)); }, hint: 'Zoek zender…' },
+
+    usb: { title: 'Bestanden', load: async () => {
+      const all = K.library.tracks;
+      const rows = [];
+      const byO = new Map(); for (const t of all) { const o = t.origin || 'Overig'; if (!byO.has(o)) byO.set(o, []); byO.get(o).push(t); }
+      for (const [o, ts] of [...byO.entries()].sort((a, b) => a[0].localeCompare(b[0])))
+        rows.push(rowsFolder(o, ts.length + ' items', () => openFolder(o, async () => {
+          const byF = new Map(); for (const t of ts) { const f = folderOf(t); if (!byF.has(f)) byF.set(f, []); byF.get(f).push(t); }
+          return [{ icon: 'play', title: 'Alles afspelen', sub: ts.length + ' nummers', onclick: () => P.play(ts[0], ts) },
+            ...[...byF.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([f, fs]) => rowsFolder(f, fs.length + ' items', () => openFolder(f, async () => fs.map(t => trackRowB(t, fs)))))];
+        }), /sd|usb|cd/i.test(o) ? 'usb' : 'folder'));
+      rows.push({ icon: 'scan', title: 'Muziek zoeken op SD/USB', sub: 'Scan de opslag van je autoradio', chev: true, onclick: () => K.scan.run() });
+      if (K.platform !== 'android') rows.push({ icon: 'plus', title: 'Map toevoegen', sub: 'Kies een map met muziek', chev: true, onclick: () => $('#addFolder').click() });
+      return rows;
+    }, search: async q => { const l = K.library.tracks.filter(t => [t.title, t.artist, t.album].join(' ').toLowerCase().includes(q.toLowerCase())); return l.slice(0, 300).map(t => trackRowB(t, l)); }, hint: 'Zoek in je muziek…' },
+
+    stream: { title: 'Stream', load: async () => [
+      { icon: 'search', title: 'Online zoeken', sub: 'Audius · Internet Archive · Jamendo · je accounts', chev: true, onclick: () => { B.searching = true; renderBrowser(); } },
+      rowsFolder('Favoriete nummers', K.favs.tracks.length + ' items', () => openFolder('Favoriete nummers', async () => K.favs.tracks.map(t => trackRowB(t, K.favs.tracks))), 'star'),
+      rowsFolder('Laatst gespeeld', K.recent.list.length + ' items', () => openFolder('Laatst gespeeld', async () => { const l = K.recent.list; return l.map(t => t.kind === 'station' ? stationRow(t, [t]) : trackRowB(t, l.filter(x => x.kind === 'track'))); })),
+      rowsFolder('Wachtrij', P.queue.length + ' items', () => openFolder('Wachtrij', async () => P.queue.map(t => t.kind === 'station' ? stationRow(t, P.queue) : trackRowB(t, P.queue))), 'queue'),
+      { icon: 'link', title: 'Accounts koppelen', sub: 'Spotify, eigen server, Jamendo', chev: true, onclick: () => showPage('accounts') }
+    ], search: async q => {
+      const out = [];
+      await K.sources.searchAll(q, (p, items) => { for (const it of items) out.push(it.kind === 'album' ? albumRow(it) : trackRowB(it, items.filter(x => x.kind === 'track'))); });
+      return out;
+    }, hint: 'Artiest, nummer, genre…' },
+
+    cd: { title: 'CD', load: async () => {
+      const a = K.scan.getHw().disc;
+      return [
+        { icon: 'disc', title: a ? 'Open ' + a.label : 'CD/DVD-speler openen', sub: 'Ingebouwde speler van je autoradio', chev: true, onclick: () => K.scan.hw('disc') },
+        { icon: 'gear', title: 'Andere CD-app kiezen', sub: a ? 'Nu: ' + a.package : 'Kies de CD/DVD-app van je autoradio', chev: true, onclick: () => K.scan.hw('disc', true) },
+        { icon: 'usb', title: 'CD met MP3’s', sub: 'Data-CD’s verschijnen onder USB na een scan', chev: true, onclick: () => setTab('usb') }];
+    } }
+  };
+
+  let renderTok = 0;
+  async function renderBrowser() {
+    if (!car) return;
+    const tok = ++renderTok;
+    const root = ROOT[B.tab];
+    const top = B.stack[B.stack.length - 1];
+    const title = B.page ? (B.page === 'settings' ? 'Instellingen' : 'Accounts') : B.searching ? 'Zoeken' : top ? top.title : root.title;
+    car.bTitle.textContent = title;
+    car.bBack.classList.toggle('hidden', !(B.stack.length || B.searching || B.page));
+    car.bSearchBtn.classList.toggle('hidden', !root.search || !!B.page);
+    car.browser.classList.toggle('page', !!B.page);
+    $('#main').classList.toggle('car-page', !!B.page);
+    if (B.page) { _show(B.page); car.card2.classList.add('hidden'); return; }
+    car.bSearch.classList.toggle('hidden', !B.searching);
+    car.bInput.placeholder = root.hint || 'Zoeken…';
+    const list = car.bList;
+    let rows;
+    if (B.searching && !B.q) { list.innerHTML = ''; list.append(el('div', { class: 'b-note' }, 'Typ en druk op Enter')); car.card2.classList.add('hidden'); return; }
+    list.innerHTML = '<div class="b-note">Laden…</div>';
+    try { rows = B.searching ? await root.search(B.q) : await (top ? top.load() : root.load()); }
+    catch { rows = null; }
+    if (tok !== renderTok) return;
+    list.innerHTML = '';
+    if (!rows) { list.append(el('div', { class: 'b-note' }, navigator.onLine ? 'Kan dit nu niet laden' : 'Offline — kies USB voor je eigen muziek')); return; }
+    if (!rows.length) list.append(el('div', { class: 'b-note' }, 'Leeg'));
+    for (const r of rows) list.append(rowEl(r));
+    // zwevend kaartje rechtsonder (zoals in het voorbeeld): huidige map + aantal
+    const n = rows.filter(r => r.item || r.chev).length;
+    car.card2.classList.remove('hidden');
+    car.card2Title.textContent = title;
+    car.card2Sub.textContent = n + (n === 1 ? ' item' : ' items');
+    markBrowser();
+  }
+  function rowEl(r) {
+    const ic = el('span', { class: 'b-ic' + (r.icon === 'folder' || r.icon === 'usb' && r.chev ? ' fold' : ''), html: I(r.icon === 'usb' && r.chev ? 'folder' : r.icon || 'folder') });
+    if (r.img) {
+      const img = el('img', { src: r.img, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
+      img.onerror = () => img.replaceWith(el('span', { class: 'b-ic', html: I(r.icon) }));
+      ic.innerHTML = ''; ic.className = 'b-ic img'; ic.append(img);
+    }
+    const row = el('div', { class: 'b-row', 'data-id': r.item ? r.item.id : '' }, ic,
+      el('div', { class: 'b-txt' }, el('div', { class: 'b-t' }, r.title || ''), r.sub ? el('div', { class: 'b-s' }, r.sub) : null));
+    if (r.badge) row.append(el('span', { class: 'b-badge' }, r.badge));
+    if (r.fav && r.item) {
+      const f = el('button', { class: 'b-fav' + (K.favs.isFav(r.item) ? ' on' : ''), html: I('star') });
+      f.addEventListener('click', e => { e.stopPropagation(); f.classList.toggle('on', K.favs.toggle(r.item)); });
+      row.append(f);
+    } else if (r.chev) row.append(el('span', { class: 'b-chev', html: I('chev') }));
+    row.addEventListener('click', r.onclick);
+    return row;
+  }
+  const markBrowser = () => { if (car) car.bList.querySelectorAll('.b-row').forEach(n => n.classList.toggle('sel', !!P.current && n.dataset.id === P.current.id)); };
+  function setTab(t) {
+    if (t === 'cd' && K.scan.getHw().disc) K.scan.hw('disc');
+    B.tab = t; B.stack = []; B.q = ''; B.searching = false; B.page = null;
+    renderBrowser(); updateCar();
+  }
+  function showPage(v) { B.page = v; renderBrowser(); updateCar(); }
 
   function goBack() {
     if (!saver.classList.contains('hidden')) return closeSaver();
     if (isFullscreen()) return exitFullscreen();
     if ($('#scanDialog').open) return $('#scanDialog').close();
-    if (app.view === 'library' && libPath.length) { libPath.pop(); return renderLibrary(); }
-    if (app.view !== 'radio') return app.show('radio');
+    if (isCar() && browserBack()) return;
+    if (!isCar() && app.view !== 'radio') return app.show('radio');
   }
+  app.goBack = goBack;
+  app.browserBack = () => browserBack();
 
   function buildCar() {
-    const tiles = [
-      ['media', 'music', 'Media', () => app.show('radio')],
-      ['search', 'search', 'Zoeken', () => app.show('search')],
-      ['favorites', 'star', 'Favorieten', () => app.show('favorites')],
-      ['settings', 'gear', 'Instellingen', () => app.show('settings')]
-    ];
-    const tabs = [
-      ['radio', 'tower', 'Radio', () => app.show('radio')],
-      ['fm', 'fm', 'FM', () => K.scan.hw('radio')],
-      ['cd', 'disc', 'CD', () => K.scan.hw('disc')],
-      ['library', 'usb', 'USB/SD', () => app.show('library')],
-      ['nowplaying', 'queue', 'Wachtrij', () => app.show('nowplaying')]
-    ];
-    car = {
-      status: el('header', { id: 'carStatus' },
-        btnI('cs-btn', 'home', '', () => app.show('radio'), { title: 'Home' }),
-        el('span', { class: 'cs-sep' }),
-        el('span', { class: 'cs-clock', id: 'csClock' }, clock()),
-        el('span', { class: 'cs-sep' }),
-        el('span', { class: 'cs-net', id: 'csNet', html: I('wifi') }),
-        el('span', { class: 'cs-title' }, 'Klankstroom'),
-        el('span', { class: 'cs-date', id: 'csDate' }, today()),
-        el('span', { class: 'cs-sep' }),
-        btnI('cs-btn', 'scan', '', () => K.scan.run(), { title: 'Scan hardware' }),
-        el('span', { class: 'cs-sep' }),
-        btnI('cs-btn', 'back', '', goBack, { title: 'Terug' })),
-      tiles: el('nav', { id: 'carTiles' }, ...tiles.map(([id, ic, lb, fn]) => btnI('tile', ic, lb, fn, { 'data-tile': id }))),
-      center: el('section', { id: 'carCenter' }),
-      tabs: el('div', { id: 'carTabs' }, ...tabs.map(([id, ic, lb, fn]) => btnI('tab', ic, lb, fn, { 'data-tab': id }))),
-      card: el('div', { id: 'carCard' },
-        el('div', { class: 'cc-cover', id: 'ccCover' }),
-        el('div', { class: 'cc-main' },
-          el('div', { class: 'cc-head' },
-            el('div', { class: 'cc-titles' }, el('div', { class: 'cc-title', id: 'ccTitle' }, 'Klankstroom'), el('div', { class: 'cc-sub', id: 'ccSub' }, 'Kies rechts een zender of nummer')),
-            el('div', { class: 'cc-badges', id: 'ccBadges' })),
-          el('div', { class: 'cc-prog' },
-            el('input', { type: 'range', id: 'ccSeek', min: 0, max: 1000, value: 0 }),
-            el('div', { class: 'cc-times' }, el('span', { id: 'ccTime' }, '0:00'), el('span', { id: 'ccDur' }, 'LIVE'))),
-          el('div', { class: 'cc-ctrl' },
-            btnI('rnd', 'prev', '', () => P.prev(), { title: 'Vorige' }),
-            btnI('rnd big', 'play', '', () => P.current ? P.toggle() : K.toast('Kies eerst een zender of nummer'), { id: 'ccPlay', title: 'Afspelen/pauze' }),
-            btnI('rnd', 'next', '', () => P.next(), { title: 'Volgende' })))),
-      info: el('div', { id: 'carInfo' }),
-      bottom: el('footer', { id: 'carBottom' },
-        el('div', { class: 'cb-brand' }, el('img', { src: 'icons/wapen.svg', alt: '' }), el('span', {}, 'Klankstroom')),
-        el('div', { class: 'cb-btns' },
-          btnI('cb', 'shuffle', 'Shuffle', () => $('#pShuffle').click(), { id: 'cbShuffle' }),
-          btnI('cb', 'repeat', 'Herhalen', () => $('#pRepeat').click(), { id: 'cbRepeat' }),
-          btnI('cb', 'star', 'Favoriet', () => $('#pFav').click(), { id: 'cbFav' }),
-          btnI('cb', 'wave', 'Visualizer', toggleViz, { id: 'cbViz' }),
-          btnI('cb', 'monitor', 'Screensaver', toggleSaver, { id: 'cbSaver' }),
-          el('div', { class: 'cb vol' },
-            el('button', { class: 'cb-mute', id: 'cbMute', onclick: () => P.toggleMute(), html: I('volume') }),
-            el('input', { type: 'range', id: 'cbVol', min: 0, max: 1, step: .01, value: S.volume }))))
-    };
+    car = {};
+    car.status = el('header', { id: 'carStatus' },
+      btnI('cs-btn', 'home', '', () => { setTab('radio'); }, { title: 'Home' }),
+      el('span', { class: 'cs-sep' }),
+      el('span', { class: 'cs-clock', id: 'csClock' }, clock()),
+      el('span', { class: 'cs-sep' }),
+      el('span', { class: 'cs-net', id: 'csNet', html: I('wifi') }),
+      el('span', { class: 'cs-gap' }),
+      el('span', { class: 'cs-date', id: 'csDate' }, today()),
+      el('span', { class: 'cs-sep' }),
+      btnI('cs-btn', 'scan', '', () => K.scan.run(), { title: 'Scan hardware' }),
+      el('span', { class: 'cs-sep' }),
+      btnI('cs-btn', 'back', '', goBack, { title: 'Terug' }));
+    car.tiles = el('nav', { id: 'carTiles' },
+      btnI('tile', 'nav', 'Navigatie', () => K.scan.hw('nav'), { 'data-tile': 'nav' }),
+      btnI('tile', 'music', 'Media', () => { B.page = null; renderBrowser(); updateCar(); }, { 'data-tile': 'media' }),
+      btnI('tile', 'phone', 'Telefoon', () => K.scan.hw('phone'), { 'data-tile': 'phone' }),
+      btnI('tile', 'gear', 'Instellingen', () => showPage('settings'), { 'data-tile': 'settings' }));
+    car.center = el('section', { id: 'carCenter' });
+    car.tabs = el('div', { id: 'carTabs' }, ...[['radio', 'tower', 'Radio'], ['cd', 'disc', 'CD'], ['usb', 'usb', 'USB'], ['stream', 'globe', 'Stream']]
+      .map(([id, ic, lb]) => btnI('tab', ic, lb, () => setTab(id), { 'data-tab': id })));
+    car.card = el('div', { id: 'carCard' },
+      el('div', { class: 'cc-cover', id: 'ccCover' }),
+      el('div', { class: 'cc-main' },
+        el('div', { class: 'cc-head' },
+          el('div', { class: 'cc-titles' }, el('div', { class: 'cc-title', id: 'ccTitle' }, 'Klankstroom'), el('div', { class: 'cc-sub', id: 'ccSub' }, '')),
+          el('div', { class: 'cc-badges', id: 'ccBadges' })),
+        el('div', { class: 'cc-prog' },
+          el('input', { type: 'range', id: 'ccSeek', min: 0, max: 1000, value: 0 }),
+          el('div', { class: 'cc-times' }, el('span', { id: 'ccTime' }, '0:00'), el('span', { id: 'ccDur' }, 'LIVE'))),
+        el('div', { class: 'cc-ctrl' },
+          btnI('rnd', 'prev', '', () => P.prev(), { title: 'Vorige' }),
+          btnI('rnd big', 'play', '', () => P.current ? P.toggle() : K.toast('Kies rechts een zender of nummer'), { id: 'ccPlay', title: 'Afspelen/pauze' }),
+          btnI('rnd', 'next', '', () => P.next(), { title: 'Volgende' }))));
+    car.panel = el('div', { id: 'carPanel' });
+    car.bTitle = el('span', { class: 'b-title' }, 'Radio');
+    car.bBack = btnI('b-hbtn hidden', 'up', '', () => browserBack(), { title: 'Terug' });
+    car.bSearchBtn = btnI('b-hbtn', 'search', '', () => { B.searching = !B.searching; B.q = ''; renderBrowser(); if (B.searching) setTimeout(() => car.bInput.focus(), 50); }, { title: 'Zoeken' });
+    car.bInput = el('input', { type: 'search', placeholder: 'Zoeken…' });
+    car.bInput.addEventListener('keydown', e => { if (e.key === 'Enter') { B.q = car.bInput.value.trim(); car.bInput.blur(); renderBrowser(); } });
+    car.bSearch = el('div', { class: 'b-search hidden' }, car.bInput, btnI('b-go', 'search', '', () => { B.q = car.bInput.value.trim(); renderBrowser(); }));
+    car.bList = el('div', { class: 'b-list' });
+    car.card2Title = el('div', { class: 'c2-t' }); car.card2Sub = el('div', { class: 'c2-s' });
+    car.card2 = el('div', { class: 'b-card hidden', html: I('folder', 'c2-ic') }, car.card2Title, car.card2Sub);
+    car.browser = el('div', { id: 'carBrowser' },
+      el('div', { class: 'b-head' }, car.bBack, el('span', { class: 'b-hic', html: I('folder') }), car.bTitle, car.bSearchBtn),
+      car.bSearch, car.bList, car.card2);
+    car.panel.append(car.browser);
+    car.bottom = el('footer', { id: 'carBottom' },
+      el('div', { class: 'cb-deco' }, el('img', { src: 'icons/wapen.svg', alt: '' })),
+      el('div', { class: 'cb-btns' },
+        btnI('cb', 'shuffle', 'Shuffle', () => $('#pShuffle').click(), { id: 'cbShuffle' }),
+        btnI('cb', 'repeat', 'Herhalen', () => $('#pRepeat').click(), { id: 'cbRepeat' }),
+        btnI('cb', 'star', 'Favoriet', () => $('#pFav').click(), { id: 'cbFav' }),
+        el('button', { class: 'cb cb-sw', id: 'cbViz', onclick: toggleViz, html: '<span class="cb-row">' + I('wave') + '<span class="sw"></span></span><span>Visualizer</span>' }),
+        el('button', { class: 'cb cb-sw', id: 'cbSaver', onclick: toggleSaver, html: '<span class="cb-row">' + I('monitor') + '<span class="sw"></span></span><span>Screensaver</span>' }),
+        el('div', { class: 'cb vol' },
+          el('button', { class: 'cb-mute', id: 'cbMute', onclick: () => P.toggleMute(), html: I('volume') }),
+          el('input', { type: 'range', id: 'cbVol', min: 0, max: 1, step: .01, value: S.volume }))));
     $('#ccSeek', car.card).addEventListener('input', e => { seeking = true; setProg(e.target.value / 10); });
     $('#ccSeek', car.card).addEventListener('change', e => { seeking = false; P.seek(e.target.value / 1000); });
     $('#cbVol', car.bottom).addEventListener('input', e => { P.setVolume(+e.target.value); $('#pVol').value = e.target.value; });
@@ -534,52 +662,46 @@
     exitFullscreen();
     if (on) {
       if (!car) buildCar();
-      remember($('#stage')); remember($('#miniViz'));
+      remember($('#stage')); remember($('#miniViz')); remember($('#main'));
       appEl.prepend(car.status);
-      appEl.append(car.tiles, car.center, car.bottom);
-      car.center.append($('#stage'), car.tabs, car.card, car.info);
+      appEl.append(car.tiles, car.center, car.panel, car.bottom);
+      car.center.append($('#stage'), car.tabs, car.card);
+      car.panel.append($('#main'));
       $('#stage').append($('#miniViz'));
-      $('#miniViz').width = 90; $('#miniViz').height = 56;
+      $('#miniViz').width = 70; $('#miniViz').height = 64;
       appEl.classList.add('car');
       document.body.classList.add('car-body');
+      if (!K.LS.get('carVizSet', false)) { K.LS.set('carVizSet', true); S.vizMode = 'mountains'; S.vizVariant = 1; }
+      renderBrowser();
     } else {
-      restore($('#miniViz')); restore($('#stage'));
+      restore($('#miniViz')); restore($('#stage')); restore($('#main'));
+      $('#main').classList.remove('car-page');
       $('#miniViz').width = 120; $('#miniViz').height = 32;
-      for (const k of ['status', 'tiles', 'center', 'bottom']) car[k].remove();
+      for (const k of ['status', 'tiles', 'center', 'panel', 'bottom']) car[k].remove();
       appEl.classList.remove('car');
       document.body.classList.remove('car-body');
+      _show(app.view);
     }
-    if (app.view === 'library') renderLibrary();
     updateCar();
   }
 
   function updateCar() {
     if (!car || !isCar()) return;
-    const it = P.current, v = app.view;
-    const tileOf = { radio: 'media', library: 'media', nowplaying: 'media', search: 'search', favorites: 'favorites', settings: 'settings', accounts: 'settings' };
-    car.tiles.querySelectorAll('.tile').forEach(b => b.classList.toggle('on', b.dataset.tile === tileOf[v]));
-    car.tabs.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === v));
-    // spelerkaart
+    const it = P.current;
+    car.tiles.querySelectorAll('.tile').forEach(b => b.classList.toggle('on', b.dataset.tile === (B.page ? 'settings' : 'media')));
+    car.tabs.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === B.tab));
     const cov = $('#ccCover'); cov.innerHTML = '';
     if (it) cov.append(coverEl(it, 'cc-noimg')); else cov.append(el('img', { src: 'icons/wapen.svg', alt: '', class: 'cc-logo' }));
     $('#ccTitle').textContent = it ? it.title || '' : 'Klankstroom';
     $('#ccSub').textContent = it ? [it.artist, it.album].filter(Boolean).join(' — ') : 'Kies rechts een zender of nummer';
     const b = $('#ccBadges'); b.innerHTML = '';
     if (it) {
-      if (it.kind === 'station') b.append(el('span', { class: 'bdg live' }, 'LIVE'));
-      if (it.codec) b.append(el('span', { class: 'bdg' }, it.codec));
-      if (it.bitrate) b.append(el('span', { class: 'bdg' }, it.bitrate + ' kbps'));
+      b.append(el('span', { class: 'bdg' }, it.kind === 'station' ? 'LIVE' : (it.codec || (it.source === 'local' ? 'USB' : 'STREAM'))));
+      b.append(el('span', { class: 'bdg-sig' + (P.playing ? ' on' : ''), html: I('signal') }));
     }
     $('#ccSeek').disabled = !it || it.kind === 'station';
-    $('#ccPlay').innerHTML = I(P.playing ? 'pause' : 'play');
-    // info onder de kaart
-    const nxt = it && P.queue.length > 1 && it.kind !== 'station' ? P.queue[(P.index + 1) % P.queue.length] : null;
-    const src = it && ({ radio: 'Internetradio', audius: 'Audius', archive: 'Internet Archive', jamendo: 'Jamendo', subsonic: 'Eigen server', spotify: 'Spotify', local: 'Lokaal', input: 'Ingang' }[it.source] || it.source);
-    car.info.innerHTML = '';
-    car.info.append(el('div', { class: 'ci-line' }, it ? [src, it.origin, folderOfSafe(it)].filter(Boolean).join(' · ') : 'Tik op FM of CD om de radio of CD-speler van je auto te openen'));
-    if (nxt) car.info.append(el('div', { class: 'ci-line ci-next' }, '⏭ Volgende: ' + nxt.title + (nxt.artist ? ' — ' + nxt.artist : '')));
     if (!it || it.kind === 'station') setProg(it ? 100 : 0);
-    // onderbalk-toestanden
+    $('#ccPlay').innerHTML = I(P.playing ? 'pause' : 'play');
     $('#cbShuffle').classList.toggle('on', P.shuffle);
     $('#cbRepeat').classList.toggle('on', P.repeat !== 'off');
     $('#cbFav').classList.toggle('on', !!(it && K.favs.isFav(it)));
@@ -589,10 +711,12 @@
     $('#cbVol').value = S.volume;
     $('#csNet').innerHTML = I(navigator.onLine ? 'wifi' : 'nowifi');
     $('#csNet').classList.toggle('off', !navigator.onLine);
+    markBrowser();
   }
   const setProg = pct => { const s = $('#ccSeek'); if (s) s.style.setProperty('--p', pct.toFixed(1) + '%'); };
-  const folderOfSafe = it => it.source === 'local' ? folderOf(it) : '';
   for (const ev of ['track', 'state', 'queue', 'favs', 'setting', 'mute']) K.on(ev, updateCar);
+  K.on('library', () => { if (isCar() && B.tab === 'usb' && !B.page) renderBrowser(); });
+  K.on('hwapps', () => { if (isCar() && !B.page && (B.tab === 'cd' || B.tab === 'radio') && !B.stack.length) renderBrowser(); });
   K.on('time', ({ t, d }) => {
     if (!isCar()) return;
     $('#ccTime').textContent = fmtTime(t).replace('LIVE', '0:00');
@@ -603,7 +727,15 @@
   window.addEventListener('online', updateCar); window.addEventListener('offline', updateCar);
   setInterval(() => { const c = $('#csClock'); if (c) { c.textContent = clock(); $('#csDate').textContent = today(); } }, 10000);
   const _show = app.show;
-  app.show = v => { _show(v); updateCar(); };
+  app.show = v => {
+    if (isCar()) {           // in de auto-indeling: pagina's rechts tonen
+      if (v === 'settings' || v === 'accounts') return showPage(v);
+      if (v === 'library') return setTab('usb');
+      if (v === 'search') return setTab('stream');
+      B.page = null; return renderBrowser();
+    }
+    _show(v); updateCar();
+  };
   $('#setLayout').value = S.layout || 'auto';
   $('#setLayout').addEventListener('change', e => { S.layout = e.target.value; setLayout(); });
   window.addEventListener('resize', K.debounce(setLayout, 200));
@@ -636,6 +768,7 @@
     if (!saver.classList.contains('hidden')) closeSaver();
     else if (app.isFullscreen()) app.exitFullscreen();
     else if ($('#scanDialog').open) $('#scanDialog').close();
+    else if (isCar()) { if (!app.browserBack()) C.App.minimizeApp ? C.App.minimizeApp() : C.App.exitApp(); }
     else if (app.view !== 'radio') app.show('radio');
     else C.App.minimizeApp ? C.App.minimizeApp() : C.App.exitApp();
   });

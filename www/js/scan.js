@@ -28,7 +28,14 @@
   }
 
   /* ---- hardware-apps van de fabrikant (autoradio: tuner en CD/DVD) ---- */
-  const KIND = { radio: { icon: '📻', name: 'Radio' }, disc: { icon: '💿', name: 'CD/DVD' } };
+  const KIND = { radio: { icon: '📻', name: 'Radio' }, disc: { icon: '💿', name: 'CD/DVD' }, nav: { icon: '🧭', name: 'Navigatie' }, phone: { icon: '📞', name: 'Telefoon' } };
+  /* herkenning op pakketnaam en app-naam (autoradio's gebruiken eigen apps van de fabrikant) */
+  const MATCH = {
+    radio: a => !/tunein|podcast|klankstroom/i.test(a.package) && (/radio|fmradio|\.fm(\.|$)|tuner|\.dab/i.test(a.package) || /\b(radio|fm|am\/fm|tuner|dab\+?)\b/i.test(a.label) || /收音/.test(a.label)),
+    disc: a => /dvd|\.cd(\.|$)|cdplayer|discplayer|\.disc(\.|$)/i.test(a.package) || /\b(dvd|cd|disc|blu-?ray)\b/i.test(a.label) || /碟|光盘/.test(a.label),
+    nav: a => /maps|navi|waze|igo|sygic|osmand|tomtom|navitel|garmin|here\.|mapfactor|magicearth/i.test(a.package) || /navig|maps|kaart|waze/i.test(a.label),
+    phone: a => /dialer|\.phone|\.bt$|\.bt\.|bluetooth|incallui|contacts/i.test(a.package) || /telefoon|phone|bluetooth|bellen|\bbt\b/i.test(a.label)
+  };
   const getHw = () => K.LS.get('hwApps', {});
   const setHw = (kind, app) => { const h = getHw(); if (app) h[kind] = app; else delete h[kind]; K.LS.set('hwApps', h); K.emit('hwapps'); };
   const launch = (MS, a) => (K.player.playing ? K.player.toggle() : Promise.resolve()).catch(() => {}).then(() => MS.launchApp({ package: a.package })).catch(() => K.toast('Kan ' + a.label + ' niet openen'));
@@ -155,23 +162,22 @@
   }
 
   /* Tabbladen FM / CD in de autoradio-indeling: open de gekozen app, of laat er een kiezen */
-  async function hw(kind) {
+  async function hw(kind, forcePick) {
     const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
-    if (!MS || K.platform !== 'android') return K.toast('Werkt in de Android-app op je autoradio');
+    if (!MS || K.platform !== 'android') return K.toast(KIND[kind].name + ': werkt in de Android-app op je autoradio');
     const a = getHw()[kind];
-    if (a) return launch(MS, a);
+    if (a && !forcePick) return launch(MS, a);
     if (!dlg.open) dlg.showModal();
-    // eerst automatisch zoeken; niets gevonden → zelf kiezen
-    body.innerHTML = '<div class="loader">Zoeken naar de ' + KIND[kind].name + '-app…</div>';
+    if (forcePick) return pickApp(MS, kind);
+    body.innerHTML = '<div class="loader">Zoeken naar de ' + KIND[kind].name.toLowerCase() + '-app…</div>';
     try {
-      const r = await MS.scan();
-      const found = kind === 'radio' ? r.fm.apps : ((r.disc && r.disc.apps) || []);
+      const all = (await MS.listApps()).apps.filter(x => x.package !== 'nl.endless.klankstroom');
+      const found = all.filter(MATCH[kind]);
       if (found.length === 1) { setHw(kind, found[0]); dlg.close(); return launch(MS, found[0]); }
-      if (found.length > 1) { body.innerHTML = ''; body.append(...hwSection(MS, kind, 'Welke ' + KIND[kind].name + '-app?', found, 'Gevonden op dit apparaat.', '')); return; }
+      if (found.length > 1) { body.innerHTML = ''; body.append(...hwSection(MS, kind, 'Welke ' + KIND[kind].name.toLowerCase() + '-app?', found, 'Gevonden op dit apparaat.', '')); return; }
     } catch {}
     pickApp(MS, kind);
   }
-  K.scan = { run, hw };
-  K.$('#scanBtn').addEventListener('click', run);
+  K.scan = { run, hw, getHw };  K.$('#scanBtn').addEventListener('click', run);
   K.$('#scanClose').addEventListener('click', () => dlg.close());
 })();
