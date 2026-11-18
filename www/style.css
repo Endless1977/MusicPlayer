@@ -370,3 +370,9 @@ body.car-body{background:#01040c}
 #app.car.portrait .cb-mute{font-size:22px}
 #app.car.portrait #toast{bottom:calc(var(--sab) + 150px)}
 #app.car.portrait .cc-noimg{font-size:26px}
+
+.vizlab-frame{border:0;pointer-events:none;background:#000}
+#vizlabOverlay{position:fixed;inset:0;z-index:150;background:#000;display:flex;flex-direction:column}
+#vizlabOverlay iframe{flex:1;border:0;width:100%}
+#vizlabOverlay .vo-bar{display:flex;justify-content:space-between;align-items:center;padding:calc(6px + var(--sat)) 12px 6px;background:#0b1430;gap:10px}
+#vizlabOverlay .vo-bar button{min-height:44px;font-size:16px}

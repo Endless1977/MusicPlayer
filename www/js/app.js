@@ -239,6 +239,16 @@
   }
   $('#libMode').addEventListener('click', () => { S.libMode = libFolders() ? 'list' : 'folders'; renderLibrary(); });
   $('#openAccounts').addEventListener('click', () => app.show('accounts'));
+  /* VizLab-venster: alle schuifjes en GLB-modellen, met het geluid van Klankstroom */
+  $('#openVizLab').addEventListener('click', () => {
+    const cur = K.viz.mode.vizlab || 'jet';
+    const ov = el('div', { id: 'vizlabOverlay' },
+      el('div', { class: 'vo-bar' }, el('b', {}, 'Klankstroom VizLab'),
+        el('span', { class: 'hint' }, 'Wijzigingen worden bewaard en gebruikt in de app'),
+        el('button', { class: 'primary', onclick: () => { ov.remove(); K.viz.reloadVizLab(); } }, 'Klaar')),
+      el('iframe', { src: 'vizlab/index.html?src=ext&scene=' + cur + '&variant=' + (S.vizVariant || 1), title: 'VizLab' }));
+    document.body.append(ov);
+  });
   K.on('library', () => { if (app.view === 'library') renderLibrary(); });
   $('#libFilter').addEventListener('input', K.debounce(renderLibrary, 200));
   $('#libSource').addEventListener('change', renderLibrary);

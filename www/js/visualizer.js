@@ -13,9 +13,20 @@
     { id: 'jet', name: '3D · Straaljager', three: true },
     { id: 'car', name: '3D · Heuvelrit (auto)', three: true },
     { id: 'hound', name: '3D · Windhond-coursing', three: true },
+    // VizLab-scènes (Klankstroom VizLab, ingebouwd via www/vizlab/index.html)
+    { id: 'vl-jet', name: 'VizLab · Straaljager', vizlab: 'jet' },
+    { id: 'vl-car', name: 'VizLab · Auto', vizlab: 'car' },
+    { id: 'vl-hound', name: 'VizLab · Windhond', vizlab: 'hound' },
+    { id: 'vl-kaleido', name: 'VizLab · Caleidoscoop', vizlab: 'kaleido' },
+    { id: 'vl-tunnel', name: 'VizLab · Wormgat', vizlab: 'tunnel' },
+    { id: 'vl-ridges', name: 'VizLab · Golfbergen', vizlab: 'ridges' },
+    { id: 'vl-stars', name: 'VizLab · Sterrenstorm', vizlab: 'stars' },
+    { id: 'vl-scope', name: 'VizLab · Oscilloscoop', vizlab: 'scope' },
+    { id: 'vl-sphere', name: 'VizLab · Klankbol', vizlab: 'sphere' },
+    { id: 'vl-boombox', name: 'VizLab · Boombox', vizlab: 'boombox' },
+    { id: 'vl-fractal', name: 'VizLab · Fractal-caleidoscoop', vizlab: 'fractal' },
     { id: 'drempels', name: 'Drempels (vloeiende warp)', classic: 0 },
     { id: 'tunnel2d', name: 'Klassieke tunnel', classic: 1 },
-    { id: 'kaleido', name: 'Caleidoscoop', classic: 2 },
     { id: 'ring', name: 'Spectrumring', classic: 3 },
     { id: 'golven', name: 'Golven (oscilloscoop)', classic: 4 },
     { id: 'nevel', name: 'Nevel', classic: 5 }
@@ -294,7 +305,7 @@
       const c3 = document.createElement('canvas');
       c3.className = 'viz3d';
       canvas.after(c3);
-      targets.set(canvas, { r: null, c3, visible });
+      targets.set(canvas, { r: null, c3, visible, frame: null });
     },
     audio: audioTex,
     feat
@@ -314,7 +325,20 @@
     }
     const m = V.mode, t = (now - t0) / 1000;
     for (const [canvas, tg] of targets) {
-      if (!tg.visible()) continue;
+      const vis = tg.visible();
+      // VizLab draait in een eigen (onzichtbaar bedienbaar) frame; pauzeren als het niet in beeld is
+      if (tg.frame) {
+        const show = vis && !!m.vizlab;
+        tg.frame.style.display = show ? 'block' : 'none';
+        const api = vizApi(tg.frame);
+        if (api) { api.hidden(!show); if (show) api.set(m.vizlab, K.settings.vizVariant || 1); }
+      }
+      if (!vis) continue;
+      if (m.vizlab) {
+        canvas.style.display = 'none'; tg.c3.style.display = 'none';
+        if (!tg.frame) tg.frame = makeFrame(tg.c3, m.vizlab);
+        continue;
+      }
       const use3d = !!m.three && !!K.viz3d;
       canvas.style.display = use3d ? 'none' : 'block';
       tg.c3.style.display = use3d ? 'block' : 'none';
@@ -328,5 +352,16 @@
       }
     }
   }
+  function vizApi(f) { try { return f.contentWindow && f.contentWindow.__ksEmbed; } catch { return null; } }
+  function makeFrame(after, scene) {
+    const f = document.createElement('iframe');
+    f.className = 'viz3d vizlab-frame';
+    f.setAttribute('title', 'VizLab');
+    f.src = 'vizlab/index.html?embed&scene=' + scene + '&variant=' + (K.settings.vizVariant || 1);
+    after.after(f);
+    return f;
+  }
+  /* na het afstellen in het VizLab-venster: ingebouwde frames opnieuw laden met de nieuwe instellingen */
+  V.reloadVizLab = () => { for (const tg of targets.values()) if (tg.frame) { tg.frame.remove(); tg.frame = null; } };
   requestAnimationFrame(loop);
 })();
