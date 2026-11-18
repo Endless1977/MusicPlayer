@@ -9,6 +9,26 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 · [Klankstroom-Setup.exe (Windows)](https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom-Setup.exe)
 · [webversie](https://endless1977.github.io/MusicPlayer/)
 
+## Screenshots
+
+**Autoradio (9 inch, 1024×600):** tegels links, visualizer + speler in het midden, bladerlijst rechts
+
+![Autoradio-indeling met radio en Neon-bergen](docs/screenshots/autoradio-radio.png)
+
+![Autoradio-indeling met USB-mappen en VizLab-straaljager](docs/screenshots/autoradio-usb-straaljager.png)
+
+| Telefoon | Pc |
+|---|---|
+| <img src="docs/screenshots/telefoon.png" width="260" alt="Telefoon"> | <img src="docs/screenshots/pc.png" width="560" alt="Pc"> |
+
+**Visualizers (VizLab):** een greep uit de 11 scènes
+
+![Visualizers](docs/screenshots/visualizers.png)
+
+**VizLab afstellen** (Instellingen → VizLab openen) met het geluid van de speler
+
+![VizLab](docs/screenshots/vizlab.png)
+
 ## Wat zit erin
 
 | Onderdeel | Wat het doet |
@@ -18,7 +38,8 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 | 🔗 **Accounts** | **Spotify** (Premium, PKCE-login; op de pc speelt het in de app, op Android via Spotify Connect), **Navidrome/Subsonic** (je eigen muziekserver, bijv. op de Pi), **Jamendo**, **Audius**. Deezer/Apple Music/YouTube Music/Tidal hebben geen open afspeel-API; die openen in hun eigen app. |
 | 💽 **Bibliotheek** | Lokale muziek met ID3-titels en -hoezen. Werkt **volledig offline**. |
 | 📡 **Scanknop** | **Android:** interne opslag, **SD-kaart**, USB-sticks, **USB-CD-speler**, de ingebouwde **FM-radio**-app van je telefoon en audio-ingangen. **Pc:** alle schijven, USB/SD, **CD-station** en de map Muziek. |
-| 🌀 **Visualizer** | Zes 3D-scènes in de stijl van vizz.fm (**Mesh Grid, Pulserende bol, Audiotunnel, Cycloonogen, Gloeiende roos, Gletsjerspiraal**), elk met **16 varianten**, plus klassieke feedback-effecten in de stijl van Drempels/Milkdrop. Met de knop 🌀 zet je hem **aan/uit**. |
+| 🌀 **Visualizer** | De 11 scènes van het **Klankstroom VizLab** (Straaljager, Auto, Windhond, Caleidoscoop, Wormgat, Golfbergen, Sterrenstorm, Oscilloscoop, Klankbol, Boombox, Fractal-caleidoscoop), **Neon-bergen** en de 3D-scènes in vizz.fm-stijl, elk met **16 varianten**, plus klassieke effecten in Drempels-stijl. Eén tik = volledig scherm; met 🌀 zet je hem **aan/uit**. Afstellen via Instellingen → VizLab openen. |
+| 🚗 **Autoradio-indeling** | Grote tegels (Navigatie, Media, Telefoon, Instellingen), tabbladen Radio/CD/USB/Stream en een bladerlijst. Navigatie, Telefoon, FM en CD openen de apps van je autoradio. Staande variant voor de telefoon. |
 | 🖥 **Screensaver** | Na een instelbare tijd zonder bediening verschijnt de visualizer schermvullend, met titel en klok. Zet je hem aan of uit met de knop 🖥 of in Instellingen. |
 
 ### Sneltoetsen (pc)
