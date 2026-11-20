@@ -133,6 +133,22 @@
       gl_FragColor = vec4(c * v, 1.);
     }`;
 
+  /* ---------- prestaties: lichte modus voor zwakke grafische chips (bv. PX5-autoradio met PowerVR) ---------- */
+  const gpu = (() => {
+    try {
+      const c = document.createElement('canvas').getContext('webgl');
+      if (!c) return '';
+      const e = c.getExtension('WEBGL_debug_renderer_info');
+      return String(e ? c.getParameter(e.UNMASKED_RENDERER_WEBGL) : c.getParameter(c.RENDERER));
+    } catch { return ''; }
+  })();
+  const weakGpu = /PowerVR|Mali-(T[0-8]\d\d|[2-4]\d\d)|Adreno \(TM\) [2-5]\d\d|VideoCore|Vivante|GC\d{3,4}/i.test(gpu) ||
+    (!!navigator.deviceMemory && navigator.deviceMemory <= 2);
+  K.perf = {
+    gpu, weakGpu, slow: false,
+    get lite() { const p = K.settings.perf; return p === 'lite' || (p === 'auto' && (weakGpu || this.slow)); }
+  };
+
   /* ---------- audio-analyse (gedeeld door alle schermen) ---------- */
   const audioTex = new Uint8Array(256 * 2);
   const feat = { bass: 0, mid: 0, treb: 0, beat: 0, avgBass: .2, lastBeat: 0, hue: Math.random() };
@@ -205,7 +221,7 @@
       }
     }
     resize() {
-      const gl = this.gl, r = K.settings.vizRes * Math.min(2, window.devicePixelRatio || 1);
+      const gl = this.gl, r = (K.perf.lite ? Math.min(.5, K.settings.vizRes) : K.settings.vizRes) * Math.min(2, window.devicePixelRatio || 1);
       const w = Math.max(64, Math.round(this.canvas.clientWidth * r)), h = Math.max(64, Math.round(this.canvas.clientHeight * r));
       if (w === this.w && h === this.h) return;
       this.w = this.canvas.width = w; this.h = this.canvas.height = h;
@@ -312,9 +328,20 @@
   };
 
   let last = performance.now(), t0 = last, lastCycle = last;
+  let fpsN = 0, fpsT = last;
   function loop(now) {
     requestAnimationFrame(loop);
+    const lite = K.perf.lite;
+    if (lite && now - last < 31) return;          // lichte modus: max ~30 beelden per seconde
     const dt = Math.min(.1, (now - last) / 1000); last = now;
+    // automatisch: valt de beeldsnelheid weg, schakel dan de lichte modus in
+    if (!lite && K.settings.perf === 'auto' && [...targets.values()].some(x => x.visible() && !V.mode.vizlab)) {
+      fpsN++;
+      if (now - fpsT > 4000) {
+        const fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now;
+        if (fps < 22 && now - t0 > 6000) { K.perf.slow = true; K.emit('perf'); K.toast('Lichte modus aan: dit apparaat is wat trager'); }
+      }
+    } else { fpsN = 0; fpsT = now; }
     const anyVisible = [...targets.values()].some(x => x.visible());
     if (!anyVisible && !K.settings.viz) return;
     analyse(now, dt);
@@ -331,7 +358,7 @@
         const show = vis && !!m.vizlab;
         tg.frame.style.display = show ? 'block' : 'none';
         const api = vizApi(tg.frame);
-        if (api) { api.hidden(!show); if (show) api.set(m.vizlab, K.settings.vizVariant || 1); }
+        if (api) { api.hidden(!show); if (show) { api.set(m.vizlab, K.settings.vizVariant || 1); if (api.lite) api.lite(K.perf.lite); } }
       }
       if (!vis) continue;
       if (m.vizlab) {

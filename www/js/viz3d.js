@@ -676,7 +676,8 @@ K.viz3d = {
   render(canvas, t, dt, id, variant) {
     const vw = view(canvas);
     const now = performance.now();
-    const pr = K.settings.vizRes * Math.min(2, window.devicePixelRatio || 1);
+    const lite = K.perf && K.perf.lite;
+    const pr = (lite ? Math.min(.5, K.settings.vizRes) : K.settings.vizRes) * Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(64, canvas.clientWidth), h = Math.max(64, canvas.clientHeight);
     if (w !== vw.w || h !== vw.h || pr !== vw.pr) {
       vw.w = w; vw.h = h; vw.pr = pr;
@@ -701,7 +702,8 @@ K.viz3d = {
     K.viz3dTime.value = t; K.viz3dBass.value = f.bass;
     vw.ctrl.update(t, f, dt);
     vw.bloom.strength = vw.baseBloom * .7 * (.5 + f.bass * .5 + f.beat * .3);
-    vw.composer.render(dt);
+    if (lite) { vw.renderer.toneMappingExposure = 1.35; vw.renderer.render(vw.scene, vw.camera); }   // zonder gloed-nabewerking
+    else { vw.renderer.toneMappingExposure = .95; vw.composer.render(dt); }
   }
 };
 K.emit('viz3d-ready');

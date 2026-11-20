@@ -397,7 +397,7 @@
   function exitFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     const p = $('.pseudo-fs');
-    if (p) { p.classList.remove('pseudo-fs'); bars(true); }
+    if (p) { p.classList.remove('pseudo-fs'); bars(true); setTimeout(applyBars, 50); }
     $('#vizFull').textContent = '⛶';
   }
   function fullscreen(node) {
@@ -420,7 +420,7 @@
     idleSince = performance.now();          // anders gaat hij na 1 seconde meteen weer open
     if (saver.classList.contains('hidden')) return;
     saver.classList.add('hidden');
-    if (K.platform === 'android' && !$('.pseudo-fs')) bars(true);
+    if (K.platform === 'android' && !$('.pseudo-fs')) { bars(true); setTimeout(applyBars, 50); }
     if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   };
   const activity = () => { idleSince = performance.now(); closeSaver(); };
@@ -450,6 +450,19 @@
   });
   syncToggles();
   if (K.platform !== 'web') $('#dlRow').classList.add('hidden');
+  /* prestaties: lichte modus (body.lite) en apparaatinfo */
+  const applyPerf = () => {
+    document.body.classList.toggle('lite', K.perf.lite);
+    const cv = (navigator.userAgent.match(/Chrome\/(\d+)/) || [])[1];
+    $('#devInfo').textContent = [cv ? 'WebView/Chrome ' + cv : '', K.perf.gpu || 'GPU onbekend', K.perf.lite ? 'lichte modus' : 'alle effecten', innerWidth + '×' + innerHeight].filter(Boolean).join(' · ');
+  };
+  $('#setPerf').value = S.perf || 'auto';
+  $('#setPerf').addEventListener('change', e => { S.perf = e.target.value; if (S.perf !== 'auto') K.perf.slow = false; applyPerf(); });
+  $('#setHideBars').checked = S.hideBars !== false;
+  $('#setHideBars').addEventListener('change', e => { S.hideBars = e.target.checked; applyBars(); });
+  K.on('perf', applyPerf);
+  window.addEventListener('resize', K.debounce(applyPerf, 300));
+  applyPerf();
 
   /* ---------------- AUTORADIO-INDELING ----------------
      Naar het voorbeeld: statusbalk · tegels (Navigatie/Media/Telefoon/Instellingen) ·
@@ -670,6 +683,7 @@
   function setLayout() {
     const on = wantCar(), appEl = $('#app');
     appEl.classList.toggle('portrait', on && innerHeight > innerWidth);
+    applyBars();
     if (on === isCar()) return;
     exitFullscreen();
     if (on) {
@@ -697,6 +711,10 @@
     updateCar();
   }
 
+  function applyBars() {
+    if (K.platform !== 'android' || isFullscreen() || !saver.classList.contains('hidden')) return;
+    bars(!(S.hideBars !== false && wantCar() && innerWidth > innerHeight));
+  }
   function updateCar() {
     if (!car || !isCar()) return;
     const it = P.current;

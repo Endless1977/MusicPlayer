@@ -376,3 +376,58 @@ body.car-body{background:#01040c}
 #vizlabOverlay iframe{flex:1;border:0;width:100%}
 #vizlabOverlay .vo-bar{display:flex;justify-content:space-between;align-items:center;padding:calc(6px + var(--sat)) 12px 6px;background:#0b1430;gap:10px}
 #vizlabOverlay .vo-bar button{min-height:44px;font-size:16px}
+
+/* ================= LICHTE MODUS (zwakke grafische chip, bv. PX5 PowerVR) ================= */
+body.lite *,body.lite *::before,body.lite *::after{box-shadow:none!important;text-shadow:none!important;filter:none!important;transition:none!important;animation:none!important;backdrop-filter:none!important}
+body.lite #app.car{background:#061433}
+body.lite.car-body{background:#061433}
+body.lite #app.car .neon,body.lite #carTiles .tile,body.lite #carTabs,body.lite #carCard,body.lite #carPanel,body.lite .cb-btns{background:#0b1d42}
+body.lite #carTiles .tile.on,body.lite #carTabs .tab.on{background:#4a3006}
+body.lite .rnd{background:#0a1530}
+body.lite .cb-deco{background:#05102a}
+body.lite .b-card{background:#0d2350}
+body.lite .b-row.sel{background:#1a6fe0}
+body.lite .cc-prog input::-webkit-slider-runnable-track{background:linear-gradient(90deg,#ff9a1a var(--p),#1a5fc8 var(--p))}
+
+/* ================= LAAG LIGGEND SCHERM (autoradio 1024×600 mét systeembalk ≈ 1024×545) ================= */
+@media (orientation:landscape) and (max-height:640px){
+  #app.car:not(.portrait){grid-template-rows:42px minmax(0,1fr) 58px;gap:6px 8px;padding:4px 8px 4px 8px;border-radius:14px}
+  #app.car:not(.portrait) #carStatus{font-size:20px;gap:12px;padding:0 12px}
+  #app.car:not(.portrait) .cs-btn{font-size:26px}
+  #app.car:not(.portrait) .cs-net{font-size:24px}
+  #app.car:not(.portrait) .cs-date{font-size:17px}
+  #app.car:not(.portrait) #carTiles{gap:6px}
+  #app.car:not(.portrait) #carTiles .tile{font-size:15px;border-radius:14px;gap:2px}
+  #app.car:not(.portrait) #carTiles .tile .ic{font-size:30px}
+  #app.car:not(.portrait) #carCenter{gap:6px}
+  #app.car:not(.portrait) #stage{flex:0 0 27%;border-radius:14px}
+  #app.car:not(.portrait) #carTabs .tab{min-height:42px;font-size:16px;gap:6px}
+  #app.car:not(.portrait) #carTabs .tab .ic{font-size:22px}
+  #app.car:not(.portrait) #carCard{overflow:hidden;align-items:stretch;padding:8px 14px;gap:14px;border-radius:14px}
+  #app.car:not(.portrait) .cc-cover{height:auto;width:auto;align-self:center;max-height:100%;flex:0 0 auto;aspect-ratio:1;margin:0}
+  #app.car:not(.portrait) .cc-cover{height:calc(100% - 4px)}
+  #app.car:not(.portrait) .cc-main{justify-content:space-between;gap:2px;min-height:0}
+  #app.car:not(.portrait) .cc-title{font-size:22px;line-height:1.15}
+  #app.car:not(.portrait) .cc-sub{font-size:15px}
+  #app.car:not(.portrait) .bdg{font-size:12px;padding:0 6px}
+  #app.car:not(.portrait) .bdg-sig{font-size:20px}
+  #app.car:not(.portrait) .cc-prog{margin:0}
+  #app.car:not(.portrait) .cc-prog input{height:20px}
+  #app.car:not(.portrait) .cc-times{font-size:14px}
+  #app.car:not(.portrait) .cc-ctrl{gap:34px;margin:0}
+  #app.car:not(.portrait) .rnd{width:50px;height:50px;font-size:22px}
+  #app.car:not(.portrait) .rnd.big{width:62px;height:62px;font-size:28px;border-width:3px}
+  #app.car:not(.portrait) .b-head{font-size:20px;padding:8px 12px}
+  #app.car:not(.portrait) .b-row{min-height:46px;font-size:17px}
+  #app.car:not(.portrait) .b-search input{min-height:42px;font-size:17px}
+  #app.car:not(.portrait) .b-card{padding:6px 12px;min-width:34%}
+  #app.car:not(.portrait) .c2-t{font-size:16px}
+  #app.car:not(.portrait) .c2-s{font-size:13px}
+  #app.car:not(.portrait) .b-card .c2-ic{font-size:32px}
+  #app.car:not(.portrait) .cb{font-size:13px;padding:0 14px;min-width:78px}
+  #app.car:not(.portrait) .cb .ic{font-size:22px}
+  #app.car:not(.portrait) .sw{width:38px;height:20px}
+  #app.car:not(.portrait) .sw::after{width:14px}
+  #app.car:not(.portrait) .cb.on .sw::after{left:21px}
+  #app.car:not(.portrait) .cb-mute{font-size:24px}
+}

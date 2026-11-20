@@ -9,6 +9,8 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 · [Klankstroom-Setup.exe (Windows)](https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom-Setup.exe)
 · [webversie](https://endless1977.github.io/MusicPlayer/)
 
+✅ **Goedgekeurde versie:** 1.0.14 (branch [`stabiel`](https://github.com/Endless1977/MusicPlayer/tree/stabiel)): alles werkt zoals gevraagd.
+
 ## Screenshots
 
 **Autoradio (9 inch, 1024×600):** tegels links, visualizer + speler in het midden, bladerlijst rechts
@@ -70,6 +72,8 @@ npx cap open android      # openen in Android Studio
 De webversie draait met elke statische server: `npx http-server www`.
 
 ## Goed om te weten
+
+- **Zwakke autoradio's (bv. PX5/RK3368 met PowerVR):** de app herkent de grafische chip en zet de **lichte modus** aan: geen gloedschaduwen, visualizer op halve resolutie zonder bloom, max. 30 beelden/s. Instelbaar onder Instellingen → Prestaties. In de autoradio-stijl wordt de Android-systeembalk verborgen voor meer ruimte (uit te zetten).
 
 - **Visualizer bij radio:** veel radiostreams sturen geen CORS-headers. In de browser kan de app het geluid van zulke streams dan niet analyseren, en volgt de visualizer een gesimuleerd ritme. In de pc-app en voor lokale bestanden reageert hij altijd op het echte geluid.
 - **Audio-CD’s:** Windows en Android geven CD-audio (CDDA) niet als bestand vrij. Data-CD’s met MP3’s werken wel. Een losse CD-speler of radio kun je via een **lijn-ingang** laten meespelen (scanknop → Audio-ingangen).
