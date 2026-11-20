@@ -461,3 +461,5 @@ body.lite .cc-prog input::-webkit-slider-runnable-track{background:linear-gradie
 .mtc-btns button{min-height:44px;padding:0 12px}
 .mtc-state{padding:8px;background:rgba(255,255,255,.05);border-radius:8px}
 .mtc-log{font:12px/1.35 monospace;white-space:pre-wrap;background:#000;padding:8px;border-radius:8px;max-height:40vh;overflow:auto}
+.m-btn.call svg,.m-btn.hang svg{width:30px;height:30px}
+.m-btn.hang svg{transform:rotate(135deg)}
