@@ -252,6 +252,74 @@ public class MediaScanPlugin extends Plugin {
         call.resolve(r);
     }
 
+    // ------------------------------------------------ autoradio-hardware (MTCD/MTCE)
+    private MtcBridge mtc;
+    private MtcBridge mtc() {
+        if (mtc == null) mtc = new MtcBridge(getContext(), (name, data) -> notifyListeners(name, data));
+        return mtc;
+    }
+
+    @PluginMethod
+    public void mtcInfo(PluginCall call) {
+        JSObject r = new JSObject();
+        MtcBridge m = mtc();
+        r.put("available", m.available());
+        if (m.available()) {
+            try { r.put("avChannel", String.valueOf(m.state("av_channel", "string"))); } catch (Throwable ignored) {}
+            r.put("navi", m.naviInfo());
+        }
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void mtcSet(PluginCall call) {
+        try { mtc().set(call.getString("param", "")); call.resolve(); }
+        catch (Throwable t) { call.reject(String.valueOf(t.getCause() != null ? t.getCause() : t)); }
+    }
+
+    @PluginMethod
+    public void mtcGet(PluginCall call) {
+        try { JSObject r = new JSObject(); r.put("value", mtc().get(call.getString("param", ""))); call.resolve(r); }
+        catch (Throwable t) { call.reject(String.valueOf(t.getCause() != null ? t.getCause() : t)); }
+    }
+
+    @PluginMethod
+    public void mtcState(PluginCall call) {
+        try {
+            Object v = mtc().state(call.getString("key", ""), call.getString("kind", "string"));
+            JSObject r = new JSObject(); r.put("value", v == null ? JSObject.NULL : v); call.resolve(r);
+        } catch (Throwable t) { call.reject(String.valueOf(t.getCause() != null ? t.getCause() : t)); }
+    }
+
+    @PluginMethod
+    public void mtcAttach(PluginCall call) {
+        try { mtc().attach(call.getString("types", "Radio,Dvd,KeyDown")); call.resolve(); }
+        catch (Throwable t) { call.reject(String.valueOf(t.getCause() != null ? t.getCause() : t)); }
+    }
+
+    @PluginMethod
+    public void mtcDetach(PluginCall call) { mtc().detach(); call.resolve(); }
+
+    @PluginMethod
+    public void setNaviApp(PluginCall call) { mtc().setNaviApp(call.getString("package", "")); call.resolve(); }
+
+    @PluginMethod
+    public void btBind(PluginCall call) { mtc().btBind(); call.resolve(); }
+
+    @PluginMethod
+    public void btStatus(PluginCall call) { call.resolve(mtc().btStatus()); }
+
+    @PluginMethod
+    public void btCall(PluginCall call) {
+        try {
+            Object v = mtc().btCall(call.getString("method", ""), call.getData().opt("arg"));
+            JSObject r = new JSObject(); r.put("value", v == null ? JSObject.NULL : v); call.resolve(r);
+        } catch (Throwable t) { call.reject(String.valueOf(t)); }
+    }
+
+    @Override
+    protected void handleOnDestroy() { if (mtc != null) mtc.close(); super.handleOnDestroy(); }
+
     /** Systeemverkenner: alleen lezen, schrijft naar de SD-kaart. Voortgang via event "dumpProgress". */
     @PluginMethod
     public void systemDump(PluginCall call) {

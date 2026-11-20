@@ -10,7 +10,7 @@ if (!fs.existsSync(app)) { console.error('android/ ontbreekt: eerst "npx cap add
 // 1. Java-bestanden kopiëren
 const pkgDir = path.join(app, 'java', 'nl', 'endless', 'klankstroom');
 fs.mkdirSync(pkgDir, { recursive: true });
-for (const f of ['MediaScanPlugin.java', 'PlaybackService.java', 'StreamProxy.java', 'SystemDump.java'])
+for (const f of ['MediaScanPlugin.java', 'PlaybackService.java', 'StreamProxy.java', 'SystemDump.java', 'MtcBridge.java'])
   fs.copyFileSync(path.join(root, 'android-plugin', f), path.join(pkgDir, f));
 
 // 2. Plugin registreren in MainActivity
