@@ -461,6 +461,31 @@
   $('#setHideBars').checked = S.hideBars !== false;
   $('#setHideBars').addEventListener('change', e => { S.hideBars = e.target.checked; applyBars(); });
   K.on('perf', applyPerf);
+  /* Systeemverkenner (Android): alleen lezen, resultaat op de SD-kaart */
+  {
+    const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+    if (K.platform === 'android' && MS && MS.systemDump) {
+      $('#dumpRow').classList.remove('hidden');
+      $('#dumpGo').addEventListener('click', async () => {
+        const dlg = $('#scanDialog'), body = $('#scanBody');
+        body.innerHTML = '';
+        const bar = el('progress', { max: 100, value: 0, style: 'width:100%;height:18px' });
+        const msg = el('div', { class: 'hint', style: 'margin:8px 0;word-break:break-all' }, 'Starten…');
+        body.append(el('h3', {}, 'Systeemverkenner'), el('p', { class: 'hint' }, 'Alleen lezen, er wordt niets aan het systeem veranderd. Laat de autoradio aan staan; dit kan enkele minuten duren.'), bar, msg);
+        if (!dlg.open) dlg.showModal();
+        const sub = await MS.addListener('dumpProgress', e => { bar.value = e.pct; msg.textContent = e.msg; });
+        try {
+          const r = await MS.systemDump({ allApps: $('#dumpAll').checked });
+          bar.value = 100;
+          msg.innerHTML = '';
+          msg.append(el('b', {}, 'Klaar! '), `${r.mb} MB van ${r.gekopieerd} apps + framework gekopieerd (${r.apps} apps geïnventariseerd). Nog ${r.vrijMb} MB vrij.`,
+            el('br'), 'Map: ', el('code', {}, r.map),
+            el('br'), 'Stop de SD-kaart in je pc en kijk in Android/data/nl.endless.klankstroom/files/.');
+        } catch (e) { msg.textContent = 'Mislukt: ' + (e.message || e); }
+        finally { sub && sub.remove && sub.remove(); }
+      });
+    }
+  }
   window.addEventListener('resize', K.debounce(applyPerf, 300));
   applyPerf();
 

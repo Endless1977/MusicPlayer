@@ -252,6 +252,25 @@ public class MediaScanPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** Systeemverkenner: alleen lezen, schrijft naar de SD-kaart. Voortgang via event "dumpProgress". */
+    @PluginMethod
+    public void systemDump(PluginCall call) {
+        final boolean all = Boolean.TRUE.equals(call.getBoolean("allApps", false));
+        new Thread(() -> {
+            try {
+                org.json.JSONObject r = SystemDump.run(getContext(), all, (msg, pct) -> {
+                    JSObject e = new JSObject();
+                    e.put("msg", msg);
+                    e.put("pct", pct);
+                    notifyListeners("dumpProgress", e);
+                });
+                call.resolve(JSObject.fromJSONObject(r));
+            } catch (Throwable t) {
+                call.reject("Verkenner mislukt: " + t);
+            }
+        }, "klankstroom-verkenner").start();
+    }
+
     @PluginMethod
     public void launchApp(PluginCall call) {
         String p = call.getString("package");

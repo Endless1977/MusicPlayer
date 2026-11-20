@@ -73,6 +73,8 @@ De webversie draait met elke statische server: `npx http-server www`.
 
 ## Goed om te weten
 
+- **Systeemverkenner (Android, Instellingen):** alleen lezen. Zet systeeminfo (getprop, build.prop, /proc), een inventaris van alle apps met activities/services/receivers/providers/rechten, de systeemdiensten, de methodes van Microntek-klassen (`android.microntek.CarManager` e.d.), `/system/framework` en de app-mappen van de fabrikant op de SD-kaart in `Android/data/nl.endless.klankstroom/files/verkenner-DATUM/`. Ruimte: ±0,5–1 GB (met alle apps ±1,5–3 GB).
+
 - **Zwakke autoradio's (bv. PX5/RK3368 met PowerVR):** de app herkent de grafische chip en zet de **lichte modus** aan: geen gloedschaduwen, visualizer op halve resolutie zonder bloom, max. 30 beelden/s. Instelbaar onder Instellingen → Prestaties. In de autoradio-stijl wordt de Android-systeembalk verborgen voor meer ruimte (uit te zetten).
 
 - **Visualizer bij radio:** veel radiostreams sturen geen CORS-headers. In de browser kan de app het geluid van zulke streams dan niet analyseren, en volgt de visualizer een gesimuleerd ritme. In de pc-app en voor lokale bestanden reageert hij altijd op het echte geluid.
