@@ -461,6 +461,21 @@
   $('#setHideBars').checked = S.hideBars !== false;
   $('#setHideBars').addEventListener('change', e => { S.hideBars = e.target.checked; applyBars(); });
   K.on('perf', applyPerf);
+  /* Autoradio (MTC): navigatie-onderdrukking en testpaneel */
+  {
+    const showMtc = () => {
+      const on = !!(K.mtc && K.mtc.available);
+      $('#naviRow').classList.toggle('hidden', !on); $('#mtcRow').classList.toggle('hidden', !on);
+      if (on && K.mtc.navi) {
+        const n = K.mtc.navi, apps = K.scan.getHw();
+        $('#naviInfo').textContent = n.app ? 'Nu: ' + ((apps.nav && apps.nav.package === n.app) ? apps.nav.label + ' (' + n.app + ')' : n.app) + ' — de radio wordt zachter als deze spreekt'
+          : 'Nog geen navigatie-app ingesteld: kies er een, dan dempt de autoradio de muziek als deze spreekt';
+      }
+    };
+    K.on('mtc', showMtc);
+    $('#naviPick').addEventListener('click', () => K.scan.pickNav());
+    $('#mtcTest').addEventListener('click', () => K.mtc.openTestPanel());
+  }
   /* Systeemverkenner (Android): alleen lezen, resultaat op de SD-kaart */
   {
     const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
@@ -524,10 +539,104 @@
   function openFolder(title, load) { B.stack.push({ title, load }); B.q = ''; B.searching = false; renderBrowser(); }
   function browserBack() { if (B.page) { B.page = null; renderBrowser(); return true; } if (B.searching) { B.searching = false; B.q = ''; renderBrowser(); return true; } if (B.stack.length) { B.stack.pop(); renderBrowser(); return true; } return false; }
 
+
+  /* ---- autoradio-hardware rechtstreeks (K.mtc): FM-tuner, CD/DVD, Bluetooth-telefoon ---- */
+  const M = K.mtc;
+  const hasMtc = () => M && M.available;
+  const mBtn = (icon, label, fn, cls = '') => el('button', { class: 'm-btn ' + cls, onclick: async e => { e.stopPropagation(); try { await fn(); } catch (err) { K.toast('Mislukt: ' + (err.message || err)); } }, html: (icon ? I(icon) : '') + (label ? '<span>' + label + '</span>' : '') });
+  const fmPlaying = () => P.current && P.current.source === 'fm';
+  function fmPanel() {
+    return el('div', { class: 'm-panel fm-panel' },
+      el('div', { class: 'm-disp' },
+        el('div', { class: 'm-big', id: 'fmFreq' }, M.fmtFreq(M.fm.khz)),
+        el('div', { class: 'm-ps', id: 'fmPs' }, M.fm.psn || ''),
+        el('div', { class: 'm-rt', id: 'fmRt' }, M.fm.rt || ''),
+        el('div', { class: 'm-meta', id: 'fmMeta' })),
+      el('div', { class: 'm-row' },
+        mBtn('prev', '', () => M.radio.seek('down')),
+        mBtn('', '−', () => M.radio.step('down'), 'sq'),
+        mBtn('play', '', () => fmPlaying() ? P.toggle() : P.play(M.radio.item(M.fm.khz, M.fm.psn)), 'primary'),
+        mBtn('', '+', () => M.radio.step('up'), 'sq'),
+        mBtn('next', '', () => M.radio.seek('up'))),
+      el('div', { class: 'm-row' },
+        mBtn('star', '', () => M.radio.save()),
+        mBtn('scan', 'Scan', () => { if (!fmPlaying()) P.play(M.radio.item()); return M.radio.seek('auto'); }),
+        mBtn('', 'MHz…', async () => {
+          const v = prompt('Frequentie in MHz (bv. 103,5)'); if (!v) return;
+          const khz = Math.round(parseFloat(v.replace(',', '.')) * 1000); if (!(khz > 60000 && khz < 110000)) return K.toast('Ongeldige frequentie');
+          return P.play(M.radio.item(khz));
+        })));
+  }
+  function cdPanel() {
+    return el('div', { class: 'm-panel cd-panel' },
+      el('div', { class: 'm-disp' },
+        el('div', { class: 'm-big', id: 'cdTitle' }, M.dvd.title || 'CD / DVD'),
+        el('div', { class: 'm-rt', id: 'cdMeta' })),
+      el('div', { class: 'm-row' },
+        mBtn('prev', '', () => M.dvd.cmd(M.DVD.prev), 'sq'),
+        mBtn('', '⏪', () => M.dvd.cmd(M.DVD.back), 'sq'),
+        mBtn('play', '', () => P.current && P.current.source === 'cd' ? P.toggle() : P.play(M.dvd.item()), 'primary'),
+        mBtn('', '⏩', () => M.dvd.cmd(M.DVD.fwd), 'sq'),
+        mBtn('next', '', () => M.dvd.cmd(M.DVD.next), 'sq')),
+      el('div', { class: 'm-row' },
+        mBtn('', '⏹', () => M.dvd.cmd(M.DVD.stop), 'sq'),
+        mBtn('repeat', '', () => M.dvd.cmd(M.DVD.repeat), 'sq'),
+        mBtn('', '⏏', () => M.dvd.eject(), 'sq')));
+  }
+  function phonePanel() {
+    const nr = el('input', { type: 'tel', id: 'btNr', placeholder: 'Nummer', class: 'm-nr' });
+    const pad = el('div', { class: 'm-pad' }, ...'123456789*0#'.split('').map(c => el('button', { onclick: () => { nr.value += c; if (M.bt.callIn || M.bt.dialOut) M.btCall('dialOutSub', c).catch(() => {}); } }, c)));
+    return el('div', { class: 'm-panel bt-panel' },
+      el('div', { class: 'm-disp' },
+        el('div', { class: 'm-big', id: 'btDev' }, '…'),
+        el('div', { class: 'm-rt', id: 'btCallInfo' }),
+        el('div', { class: 'm-meta', id: 'btMusicInfo' })),
+      el('div', { class: 'm-row' }, nr, mBtn('', '⌫', () => { nr.value = nr.value.slice(0, -1); }, 'sq')),
+      pad,
+      el('div', { class: 'm-row' },
+        mBtn('', 'Bellen', () => nr.value.trim() ? M.btCall('dialOut', nr.value.trim()) : M.btCall('reDial'), 'primary call'),
+        mBtn('', 'Opnemen', () => M.btCall('answerCall'), 'call'),
+        mBtn('', 'Ophangen', () => M.btCall('hangupCall'), 'hang')),
+      el('div', { class: 'm-row' },
+        mBtn('', 'Naar telefoon', () => M.btCall('switchVoice')),
+        mBtn('bt', 'Muziek', () => P.play(M.btItem())),
+        mBtn('', 'Spraak', () => M.btCall('voiceControl'))));
+  }
+  function updateMtcPanels() {
+    if (!hasMtc()) return;
+    const q = id => document.getElementById(id);
+    if (q('fmFreq')) {
+      q('fmFreq').textContent = M.fmtFreq(M.fm.khz); q('fmPs').textContent = M.fm.psn || (M.fm.seeking ? 'Zoeken…' : '');
+      q('fmRt').textContent = M.fm.rt || '';
+      q('fmMeta').textContent = [M.source === 'fm' ? 'FM aan' : 'FM uit', M.fm.stereo ? 'stereo' : '', M.fm.strength ? 'signaal ' + M.fm.strength : '', M.fm.scan.length ? M.fm.scan.length + ' gevonden' : ''].filter(Boolean).join(' · ');
+    }
+    if (q('cdTitle')) {
+      q('cdTitle').textContent = M.dvd.title || 'CD / DVD';
+      q('cdMeta').textContent = [M.source === 'dvd' ? 'CD aan' : 'CD uit', M.dvd.cnt ? 'nummer ' + M.dvd.idx + ' van ' + M.dvd.cnt : '', M.dvd.len ? M.dvd.pos + ' / ' + M.dvd.len : ''].filter(Boolean).join(' · ');
+    }
+    if (q('btDev')) {
+      q('btDev').textContent = !M.btService ? 'Bluetooth-dienst niet bereikbaar' : M.btConnected() ? (M.bt.dev || 'Telefoon verbonden') : 'Geen telefoon verbonden';
+      q('btCallInfo').textContent = M.bt.callIn ? '📞 Inkomend: ' + M.bt.callIn : M.bt.dialOut ? '📞 Bellen: ' + M.bt.dialOut : M.bt.phone ? 'In gesprek: ' + M.bt.phone : '';
+      const m = M.btMusic(); q('btMusicInfo').textContent = m.title ? '♪ ' + [m.title, m.artist].filter(Boolean).join(' — ') : '';
+    }
+  }
+  if (M) {
+    K.on('mtc', updateMtcPanels);
+    K.on('fmpresets', () => { if (isCar() && B.tab === 'radio' && !B.stack.length && !B.page && !B.searching) renderBrowser(); });
+    K.on('btcall', n => { K.toast('Inkomend gesprek: ' + n); if (isCar()) setTab('phone'); });
+  }
+  const presetRow = p => ({ icon: 'fm', title: p.name || M.fmtFreq(p.khz), sub: 'FM · ' + M.fmtFreq(p.khz), badge: '', item: M.radio.item(p.khz, p.name), chev: false,
+    onclick: () => P.play(M.radio.item(p.khz, p.name), M.radio.presets().map(x => M.radio.item(x.khz, x.name))) });
+
   const ROOT = {
     radio: { title: 'Radio', load: async () => {
       const rows = [];
-      if (K.platform === 'android') rows.push({ icon: 'fm', title: 'FM/AM-tuner van de auto', sub: (K.scan.getHw().radio || {}).label || 'Radio-app van je autoradio openen', chev: true, onclick: () => K.scan.hw('radio') });
+      if (hasMtc()) {
+        rows.push({ node: fmPanel() });
+        for (const p of M.radio.presets()) rows.push(presetRow(p));
+        rows.push({ icon: 'fm', title: 'Radio-app van de fabrikant', sub: (K.scan.getHw().radio || {}).label || 'Openen als reserve', chev: true, onclick: () => K.scan.hw('radio') });
+        setTimeout(updateMtcPanels, 0);
+      } else if (K.platform === 'android') rows.push({ icon: 'fm', title: 'FM/AM-tuner van de auto', sub: (K.scan.getHw().radio || {}).label || 'Radio-app van je autoradio openen', chev: true, onclick: () => K.scan.hw('radio') });
       rows.push(rowsFolder('Favoriete zenders', K.favs.stations.length + ' zenders', () => openFolder('Favoriete zenders', async () => K.favs.stations.map(s => stationRow(s, K.favs.stations))), 'star'));
       rows.push(rowsFolder('Populair in Nederland', 'Meest beluisterd', () => openFolder('Populair in Nederland', async () => { const l = await K.radio.search({ country: 'NL' }); return l.map(s => stationRow(s, l)); })));
       rows.push(rowsFolder('Populair wereldwijd', 'Meest beluisterd', () => openFolder('Wereldwijd', async () => { const l = await K.radio.search({ country: '' }); return l.map(s => stationRow(s, l)); })));
@@ -562,8 +671,25 @@
       return out;
     }, hint: 'Artiest, nummer, genre…' },
 
+    phone: { title: 'Telefoon', load: async () => {
+      setTimeout(() => { updateMtcPanels(); M.pollBt(); }, 0);
+      const rows = [{ node: phonePanel() }];
+      try {
+        const hist = await M.btCall('getHistoryList');
+        for (const h of (hist || []).slice(0, 30)) {
+          const n = M.number(h);
+          rows.push({ icon: 'phone', title: String(h).replace(/\s+/g, ' ').slice(0, 60), sub: n ? 'Tik om te bellen' : '', chev: false, onclick: () => n && M.btCall('dialOut', n) });
+        }
+      } catch {}
+      rows.push({ icon: 'phone', title: 'Telefoon-app van de fabrikant', sub: (K.scan.getHw().phone || {}).label || 'Openen als reserve', chev: true, onclick: () => K.scan.hw('phone') });
+      return rows;
+    } },
+
     cd: { title: 'CD', load: async () => {
       const a = K.scan.getHw().disc;
+      if (hasMtc()) { setTimeout(() => { updateMtcPanels(); M.dvd.poll(); }, 0); return [{ node: cdPanel() },
+        { icon: 'disc', title: a ? 'Open ' + a.label : 'DVD-app van de fabrikant', sub: 'Voor DVD-beeld en menu', chev: true, onclick: () => K.scan.hw('disc') },
+        { icon: 'usb', title: 'CD met MP3’s', sub: 'Data-CD’s verschijnen onder USB na een scan', chev: true, onclick: () => setTab('usb') }]; }
       return [
         { icon: 'disc', title: a ? 'Open ' + a.label : 'CD/DVD-speler openen', sub: 'Ingebouwde speler van je autoradio', chev: true, onclick: () => K.scan.hw('disc') },
         { icon: 'gear', title: 'Andere CD-app kiezen', sub: a ? 'Nu: ' + a.package : 'Kies de CD/DVD-app van je autoradio', chev: true, onclick: () => K.scan.hw('disc', true) },
@@ -599,12 +725,13 @@
     for (const r of rows) list.append(rowEl(r));
     // zwevend kaartje rechtsonder (zoals in het voorbeeld): huidige map + aantal
     const n = rows.filter(r => r.item || r.chev).length;
-    car.card2.classList.remove('hidden');
+    car.card2.classList.toggle('hidden', !!(rows[0] && rows[0].node));
     car.card2Title.textContent = title;
     car.card2Sub.textContent = n + (n === 1 ? ' item' : ' items');
     markBrowser();
   }
   function rowEl(r) {
+    if (r.node) return r.node;
     const ic = el('span', { class: 'b-ic' + (r.icon === 'folder' || r.icon === 'usb' && r.chev ? ' fold' : ''), html: I(r.icon === 'usb' && r.chev ? 'folder' : r.icon || 'folder') });
     if (r.img) {
       const img = el('img', { src: r.img, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
@@ -624,7 +751,7 @@
   }
   const markBrowser = () => { if (car) car.bList.querySelectorAll('.b-row').forEach(n => n.classList.toggle('sel', !!P.current && n.dataset.id === P.current.id)); };
   function setTab(t) {
-    if (t === 'cd' && K.scan.getHw().disc) K.scan.hw('disc');
+    if (t === 'cd' && !hasMtc() && K.scan.getHw().disc) K.scan.hw('disc');
     B.tab = t; B.stack = []; B.q = ''; B.searching = false; B.page = null;
     renderBrowser(); updateCar();
   }
@@ -657,7 +784,7 @@
     car.tiles = el('nav', { id: 'carTiles' },
       btnI('tile', 'nav', 'Navigatie', () => K.scan.hw('nav'), { 'data-tile': 'nav' }),
       btnI('tile', 'music', 'Media', () => { B.page = null; renderBrowser(); updateCar(); }, { 'data-tile': 'media' }),
-      btnI('tile', 'phone', 'Telefoon', () => K.scan.hw('phone'), { 'data-tile': 'phone' }),
+      btnI('tile', 'phone', 'Telefoon', () => hasMtc() ? setTab('phone') : K.scan.hw('phone'), { 'data-tile': 'phone' }),
       btnI('tile', 'gear', 'Instellingen', () => showPage('settings'), { 'data-tile': 'settings' }));
     car.center = el('section', { id: 'carCenter' });
     car.tabs = el('div', { id: 'carTabs' }, ...[['radio', 'tower', 'Radio'], ['cd', 'disc', 'CD'], ['usb', 'usb', 'USB'], ['stream', 'globe', 'Stream']]
@@ -771,6 +898,7 @@
   const setProg = pct => { const s = $('#ccSeek'); if (s) s.style.setProperty('--p', pct.toFixed(1) + '%'); };
   for (const ev of ['track', 'state', 'queue', 'favs', 'setting', 'mute']) K.on(ev, updateCar);
   K.on('library', () => { if (isCar() && B.tab === 'usb' && !B.page) renderBrowser(); });
+  K.on('mtc', () => { if (hasMtc() && !app._mtcSeen) { app._mtcSeen = true; if (isCar() && !B.page && !B.stack.length) renderBrowser(); } });
   K.on('hwapps', () => { if (isCar() && !B.page && (B.tab === 'cd' || B.tab === 'radio') && !B.stack.length) renderBrowser(); });
   K.on('time', ({ t, d }) => {
     if (!isCar()) return;

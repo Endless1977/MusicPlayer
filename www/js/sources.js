@@ -91,6 +91,6 @@
       if (item.source === 'radio') K.radio.click(item);
       return item.url;
     },
-    externalPlayer(item) { return item.source === 'spotify' ? K.accounts.spotify.player : null; }
+    externalPlayer(item) { return item.source === 'spotify' ? K.accounts.spotify.player : (K.mtc && K.mtc.available && K.mtc.players[item.source]) || null; }
   };
 })();

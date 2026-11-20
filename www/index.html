@@ -156,6 +156,9 @@
           <a class="chip" href="https://github.com/Endless1977/MusicPlayer/releases/latest/download/Klankstroom-Setup.exe">⬇ Windows</a></span></div>
         <div class="row hidden" id="dumpRow"><span>Systeemverkenner<br><small class="hint">Alleen lezen: zet systeeminfo, framework en apps van de fabrikant op de SD-kaart (±0,5–1 GB; met alle apps ±1,5–3 GB)</small></span>
           <span class="btns" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="dumpAll"> alle apps</label><button id="dumpGo">Start</button></span></div>
+        <div class="row hidden" id="naviRow"><span>Navigatie maakt de radio zachter<br><small class="hint" id="naviInfo">De autoradio dempt muziek als de gekozen navigatie-app spreekt</small></span>
+          <span class="btns" style="display:flex;gap:8px;flex-wrap:wrap"><button id="naviPick">Navigatie-app kiezen</button></span></div>
+        <div class="row hidden" id="mtcRow"><span>Autoradio-testpaneel<br><small class="hint">FM, CD/DVD, Bluetooth en navigatie rechtstreeks aansturen, met logboek</small></span><button id="mtcTest">Openen</button></div>
         <div class="row"><span>Apparaat</span><span class="hint" id="devInfo"></span></div>
         <div class="row"><span>Over</span><span class="hint">Klankstroom v1.0 · Endless · <a href="https://github.com/Endless1977/MusicPlayer" target="_blank" rel="noopener">GitHub</a></span></div>
       </div>
@@ -219,6 +222,7 @@
 <script src="js/accounts.js"></script>
 <script src="js/library.js"></script>
 <script src="js/scan.js"></script>
+<script src="js/mtc.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/app.js"></script>
 <script type="module" src="js/viz3d.js"></script>

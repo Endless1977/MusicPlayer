@@ -431,3 +431,33 @@ body.lite .cc-prog input::-webkit-slider-runnable-track{background:linear-gradie
   #app.car:not(.portrait) .cb.on .sw::after{left:21px}
   #app.car:not(.portrait) .cb-mute{font-size:24px}
 }
+
+/* ---- autoradio-hardware (FM / CD / telefoon) ---- */
+.m-panel{display:flex;flex-direction:column;gap:10px;padding:12px;margin:4px 0 10px;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08)}
+.m-disp{text-align:center;padding:6px 0}
+.m-big{font-size:clamp(28px,5vh,46px);font-weight:700;letter-spacing:.02em;color:var(--accent,#3ad)}
+.m-ps{font-size:20px;font-weight:600;min-height:1.2em}
+.m-rt{font-size:14px;opacity:.85;min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-meta{font-size:12px;opacity:.6;min-height:1.1em}
+.m-row{display:flex;gap:6px;flex-wrap:nowrap;justify-content:center}
+.m-row>*{flex:1 1 0;min-width:0}
+.m-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:52px;padding:0 8px;white-space:nowrap;overflow:hidden;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:inherit;font-size:15px}
+.m-btn svg{width:22px;height:22px;flex:none}
+.m-btn span{overflow:hidden;text-overflow:ellipsis}
+.m-btn.sq{font-size:22px}
+.m-btn.primary{background:var(--accent,#3ad);color:#001;border-color:transparent;font-weight:700}
+.m-btn.call{background:#1d8a3a;color:#fff}.m-btn.hang{background:#b3261e;color:#fff}
+.m-btn:active{transform:scale(.96)}
+.m-nr{flex:3 1 0;min-height:52px;font-size:22px;text-align:center;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.3);color:inherit}
+.m-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.m-pad button{min-height:48px;font-size:22px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit}
+@media (max-height:640px){.m-btn{min-height:44px}.m-pad button{min-height:40px}.m-big{font-size:30px}}
+#mtcPanel{position:fixed;inset:0;z-index:300;background:#0b0f16;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#mtcPanel .vo-bar{display:flex;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.1)}
+#mtcPanel .vo-bar .hint{flex:1}
+#mtcPanel .mtc-body{overflow:auto;padding:10px 14px}
+.mtc-sec h3{margin:12px 0 6px}
+.mtc-btns{display:flex;flex-wrap:wrap;gap:6px}
+.mtc-btns button{min-height:44px;padding:0 12px}
+.mtc-state{padding:8px;background:rgba(255,255,255,.05);border-radius:8px}
+.mtc-log{font:12px/1.35 monospace;white-space:pre-wrap;background:#000;padding:8px;border-radius:8px;max-height:40vh;overflow:auto}

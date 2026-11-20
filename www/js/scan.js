@@ -37,7 +37,8 @@
     phone: a => /dialer|\.phone|\.bt$|\.bt\.|bluetooth|incallui|contacts/i.test(a.package) || /telefoon|phone|bluetooth|bellen|\bbt\b/i.test(a.label)
   };
   const getHw = () => K.LS.get('hwApps', {});
-  const setHw = (kind, app) => { const h = getHw(); if (app) h[kind] = app; else delete h[kind]; K.LS.set('hwApps', h); K.emit('hwapps'); };
+  const setHw = (kind, app) => { const h = getHw(); if (app) h[kind] = app; else delete h[kind]; K.LS.set('hwApps', h); K.emit('hwapps');
+    if (kind === 'nav' && app && K.mtc && K.mtc.available) K.mtc.setNaviApp(app.package).then(() => K.toast(app.label + ' is nu de navigatie-app: de radio wordt zachter als deze spreekt')).catch(() => {}); };
   const launch = (MS, a) => (K.player.playing ? K.player.toggle() : Promise.resolve()).catch(() => {}).then(() => MS.launchApp({ package: a.package })).catch(() => K.toast('Kan ' + a.label + ' niet openen'));
 
   function hwSection(MS, kind, title, found, okText, noText) {
@@ -178,6 +179,12 @@
     } catch {}
     pickApp(MS, kind);
   }
-  K.scan = { run, hw, getHw };  K.$('#scanBtn').addEventListener('click', run);
+  function pickNav() {
+    const MS = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+    if (!MS || K.platform !== 'android') return K.toast('Werkt in de Android-app op je autoradio');
+    if (!dlg.open) dlg.showModal();
+    pickApp(MS, 'nav');
+  }
+  K.scan = { run, hw, getHw, pickNav };  K.$('#scanBtn').addEventListener('click', run);
   K.$('#scanClose').addEventListener('click', () => dlg.close());
 })();

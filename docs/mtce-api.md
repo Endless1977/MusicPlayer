@@ -90,3 +90,36 @@ Stuurwiel/widget: `hct.dvd.next/last/playpause/stop`.
 - Het geluid van de tuner en de DVD loopt analoog via de MCU naar de versterker, buiten Android om. De visualizer van
   Klankstroom kan op dat geluid dus niet reageren.
 - Alle opdrachten zijn afgeleid uit de stock-apps van dit apparaat (`MTCE_KSP`). Op andere MCU-versies kunnen ze afwijken.
+
+## Bluetooth (HCT/GOC-module, `android.microntek.mtcser`)
+
+Dienst `android.microntek.mtcser/.BlueToothService` (geëxporteerd, geen permissie). Binden met `bindService` en
+rauwe `transact` met interfacetoken `android.microntek.mtcser.BTServiceInf`. Transactienummers (1-based, volgorde AIDL):
+
+| nr | methode | nr | methode | nr | methode |
+|---|---|---|---|---|---|
+| 1 | init | 21 | rejectCall | 41 | deleteBT(String) |
+| 2 | getBTState → byte (≥1 = verbonden) | 22 | addCall | 42 | syncMatchList |
+| 3 | getAVState → byte | 23 | swichCall | 43 | getMatchList → List |
+| 4 | getDialOutNum → String | 24 | mergeCall | 44 | getDeviceList → List |
+| 5 | getCallInNum → String | 25 | voiceControl | 45 | getHistoryList → List |
+| 6 | getPhoneNum → String | 26 | switchVoice (geluid naar telefoon) | 46 | getPhoneBookList → List |
+| 11 | getNowDevAddr → long | 27 | syncPhonebook | 50/51 | musicMute / musicUnmute |
+| 12 | getNowDevName → String | 32/34 | setAutoConnect / setAutoAnswer(bool) | 52/53 | scanStart / scanStop |
+| 14–18 | avPlay, avPlayPause, avPlayStop, avPlayPrev, avPlayNext | 36 | connectBT(String mac) | 54 | dialOut(String) |
+| 19 | answerCall | 37 | disconnectBT | 55 | dialOutSub(char) — DTMF |
+| 20 | hangupCall | | | 56 / 57 | reDial / getMusicInfo → "titel\nartiest\nalbum…" |
+
+Broadcast `com.microntek.bt.report` met extras o.a. `connect_state`, `connect_avstate`, `connected_mac`, `music_info`,
+`talking_time`, `phonebook_record`; daarnaast `ACTION_HCT_TELPHONE_IN` bij een inkomend gesprek.
+
+## Navigatie-onderdrukking (radio zachter als de navigatie spreekt)
+
+Dit doet de **MCU van de autoradio**, niet de navigatie-app. Hij bewaakt het geluid van de app die als navigatie-app
+is ingesteld (`Settings.System` sleutel `gpspkname`) en dempt dan FM/CD/media.
+
+- Navigatie-app instellen: broadcast `com.microntek.setnavi` met extra `pkname` = pakketnaam.
+- Parameters (via `setParameters`, opgeslagen in `Settings.System` met de `=`-sleutel): `av_gps_monitor=` (bewaken aan/uit),
+  `av_gps_switch=` (mixen), `av_gps_gain=` (navigatievolume), `av_gps_backvol=` (achtergrondvolume tijdens spreken),
+  `av_gps_ontop=`, `av_gps_phone=`.
+- Klankstroom: Instellingen → *Navigatie maakt de radio zachter* → navigatie-app kiezen.

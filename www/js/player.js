@@ -137,6 +137,7 @@
         await handler.play(item);
         P.analysisOK = false;
       } else {
+        if (K.mtc && K.mtc.available) await K.mtc.toSys().catch(() => {});   // autoradio terug naar Android-geluid
         let url = K.sources ? await K.sources.resolveUrl(item) : item.url;
         if (!url) throw new Error('Geen stream-URL');
         url = await resolvePlaylist(url);
@@ -195,6 +196,7 @@
   };
 
   P.next = (auto) => {
+    if (P.external && P.external.next && !auto) return P.external.next();   // FM zoeken, CD/BT volgende
     if (!P.queue.length) return;
     if (auto && P.repeat === 'one') return P.play(P.current);
     let i;
@@ -204,6 +206,7 @@
     P.play(P.queue[i]);
   };
   P.prev = () => {
+    if (P.external && P.external.prev) return P.external.prev();
     if (!P.queue.length) return;
     if (active.currentTime > 4 && P.current.kind !== 'station') { active.currentTime = 0; return; }
     P.play(P.queue[(P.index - 1 + P.queue.length) % P.queue.length]);
