@@ -390,7 +390,15 @@
   /* Volledig scherm. Op Android een eigen CSS-modus: de native WebView-fullscreen legt een
      extra laag over de app die bij de terugknop kon blijven hangen en alle tikken blokkeerde. */
   const bars = on => {
-    try { const SB = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.SystemBars; if (SB) (on ? SB.show() : SB.hide()).catch(() => {}); } catch {}
+    // verborgen balken: veilige marges op 0, zodat het beeld niet verspringt als een balk even verschijnt
+    document.body.classList.toggle('nobars', !on && K.platform === 'android');
+    try {
+      const MSp = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+      if (MSp && MSp.setImmersive) return MSp.setImmersive({ on: !on }).catch(() => {
+        const SB = Capacitor.Plugins.SystemBars; if (SB) (on ? SB.show() : SB.hide()).catch(() => {});
+      });
+      const SB = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.SystemBars; if (SB) (on ? SB.show() : SB.hide()).catch(() => {});
+    } catch {}
   };
   const pseudoFs = () => K.platform === 'android' || !document.documentElement.requestFullscreen;
   function isFullscreen() { return !!document.fullscreenElement || !!$('.pseudo-fs'); }

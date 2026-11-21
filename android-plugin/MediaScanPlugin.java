@@ -16,6 +16,11 @@ import android.os.Build;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import android.provider.MediaStore;
+import android.view.Window;
+
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -250,6 +255,33 @@ public class MediaScanPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("apps", arr);
         call.resolve(r);
+    }
+
+    // ------------------------------------------------ statusbalk/navigatiebalk verbergen ("immersive sticky")
+    // Tikken of de volumeknop laten de balken nu even als doorzichtige laag verschijnen; ze verdwijnen vanzelf
+    // en de app verspringt niet (de insets blijven gelijk).
+    private boolean immersive;
+    private void applyImmersive() {
+        Window w = getActivity().getWindow();
+        WindowInsetsControllerCompat c = WindowCompat.getInsetsController(w, w.getDecorView());
+        if (immersive) {
+            c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            c.hide(WindowInsetsCompat.Type.systemBars());
+        } else c.show(WindowInsetsCompat.Type.systemBars());
+    }
+
+    @PluginMethod
+    public void setImmersive(PluginCall call) {
+        immersive = Boolean.TRUE.equals(call.getBoolean("on", true));
+        getActivity().runOnUiThread(() -> {
+            try { applyImmersive(); call.resolve(); } catch (Throwable t) { call.reject(String.valueOf(t)); }
+        });
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        if (immersive) getActivity().runOnUiThread(() -> { try { applyImmersive(); } catch (Throwable ignored) {} });
     }
 
     // ------------------------------------------------ autoradio-hardware (MTCD/MTCE)
