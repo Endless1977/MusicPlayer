@@ -314,6 +314,7 @@
     v.classList.remove('hidden');
     v.textContent = ok ? '🎵 reageert op de muziek'
       : P.current && P.current.source === 'spotify' ? '∿ geschat ritme (Spotify laat geen analyse toe)'
+      : P.current && /^(fm|cd|bt)$/.test(P.current.source) ? '∿ geschat ritme: geluid van de autoradio loopt buiten Android om'
       : K.platform === 'web' ? '∿ geschat ritme: deze zender staat analyse in de browser niet toe (wel in de app)'
       : '∿ geschat ritme: deze stream staat analyse niet toe';
   });
@@ -885,7 +886,7 @@
     $('#ccSub').textContent = it ? [it.artist, it.album].filter(Boolean).join(' — ') : 'Kies rechts een zender of nummer';
     const b = $('#ccBadges'); b.innerHTML = '';
     if (it) {
-      b.append(el('span', { class: 'bdg' }, it.kind === 'station' ? 'LIVE' : (it.codec || (it.source === 'local' ? 'USB' : 'STREAM'))));
+      b.append(el('span', { class: 'bdg' }, ({ fm: 'FM', cd: 'CD', bt: 'BLUETOOTH' })[it.source] || (it.kind === 'station' ? 'LIVE' : (it.codec || (it.source === 'local' ? 'USB' : 'STREAM')))));
       b.append(el('span', { class: 'bdg-sig' + (P.playing ? ' on' : ''), html: I('signal') }));
     }
     $('#ccSeek').disabled = !it || it.kind === 'station';
@@ -907,8 +908,22 @@
   K.on('library', () => { if (isCar() && B.tab === 'usb' && !B.page) renderBrowser(); });
   K.on('mtc', () => { if (hasMtc() && !app._mtcSeen) { app._mtcSeen = true; if (isCar() && !B.page && !B.stack.length) renderBrowser(); } });
   K.on('hwapps', () => { if (isCar() && !B.page && (B.tab === 'cd' || B.tab === 'radio') && !B.stack.length) renderBrowser(); });
+  // CD/DVD van de autoradio: tijd uit de MCU-status (mm:ss of seconden)
+  const secs = v => { v = String(v || ''); if (/^\d+$/.test(v)) return +v; const p = v.split(':').map(Number); return p.some(isNaN) ? NaN : p.reduce((s, x) => s * 60 + x, 0); };
+  K.on('mtc', () => {
+    if (!isCar() || !P.current || P.current.source !== 'cd') return;
+    const t = secs(M.dvd.pos), d = secs(M.dvd.len);
+    if (isFinite(t)) $('#ccTime').textContent = fmtTime(t);
+    if (isFinite(d) && d > 0) { $('#ccDur').textContent = fmtTime(d); if (isFinite(t)) { $('#ccSeek').value = t / d * 1000; setProg(t / d * 100); } }
+  });
+  K.on('track', it => {   // autoradio-bronnen hebben geen eigen audiotijd: oude tijd wissen
+    if (!isCar() || !it || !/^(fm|cd|bt)$/.test(it.source)) return;
+    $('#ccTime').textContent = ''; $('#ccDur').textContent = it.source === 'fm' ? 'LIVE' : ''; setProg(it.source === 'fm' ? 100 : 0); $('#ccSeek').value = it.source === 'fm' ? 1000 : 0;
+  });
   K.on('time', ({ t, d }) => {
     if (!isCar()) return;
+    if (P.current && P.current.source === 'cd') return;
+    if (P.current && P.current.source === 'bt') { $('#ccTime').textContent = ''; $('#ccDur').textContent = ''; setProg(0); return; }
     $('#ccTime').textContent = fmtTime(t).replace('LIVE', '0:00');
     if (isFinite(d) && d > 0) { $('#ccDur').textContent = fmtTime(d); if (!seeking) { $('#ccSeek').value = (t / d) * 1000; setProg(t / d * 100); } }
     else { $('#ccDur').textContent = 'LIVE'; setProg(100); }
