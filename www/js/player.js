@@ -29,13 +29,47 @@
     } catch (e) { console.warn('Geen AudioContext', e); }
   }
 
-  /* Visualizer vraagt audiodata op; bij geen echte data → null (visualizer simuleert dan) */
+  /* Visualizer vraagt audiodata op; bij geen echte data → null (visualizer simuleert dan).
+     Android: blijft de WebView-analyse stil (bv. oude WebView op de autoradio), dan de eigen
+     geluidsanalyse van Android (Visualizer op de uitgangsmix) als reserve. */
+  const MSn = () => window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+  const nat = { freq: null, wave: new Uint8Array(512).fill(128), rate: 44100, t: 0, on: false, busy: false, listen: false };
+  let silentSince = 0;
+  function natStart() {
+    const MS = MSn();
+    if (K.platform !== 'android' || !MS || !MS.vizStart || nat.on || nat.busy) return;
+    nat.busy = true;
+    if (!nat.listen) {
+      nat.listen = true;
+      MS.addListener('vizData', e => {
+        const a = String(e.fft || '').split(','); const n = a.length - 1;
+        if (n < 8) return;
+        if (!nat.freq || nat.freq.length !== n) nat.freq = new Uint8Array(n);
+        for (let i = 0; i < n; i++) nat.freq[i] = +a[i] || 0;
+        nat.rate = e.rate || 44100; nat.t = performance.now();
+        const ph = nat.t / 90;
+        for (let i = 0; i < 512; i++) nat.wave[i] = 128 + (nat.freq[2 + (i % 24)] / 4) * Math.sin(i * .19 + ph);
+      });
+    }
+    const asked = K.LS.get('vizMicAsked', false);
+    MS.vizStart({ ask: !asked }).then(() => { nat.on = true; }).catch(() => {}).finally(() => { nat.busy = false; if (!asked) K.LS.set('vizMicAsked', true); });
+  }
+  function natStop() { const MS = MSn(); if (nat.on && MS) { MS.vizStop().catch(() => {}); nat.on = false; } }
+  const natFresh = () => nat.freq && performance.now() - nat.t < 500;
   P.getData = () => {
-    if (!analyser || active !== A || !P.playing || !P.analysisOK) return null;
-    analyser.getByteFrequencyData(freq);
-    analyser.getByteTimeDomainData(wave);
-    return { freq, wave, rate: ctx.sampleRate };
+    if (!P.playing) return null;
+    if (analyser && active === A && P.analysisOK && !P.external) {
+      analyser.getByteFrequencyData(freq);
+      analyser.getByteTimeDomainData(wave);
+      let s = 0; for (let i = 2; i < 120; i++) s += freq[i];
+      if (s > 0) { silentSince = 0; return { freq, wave, rate: ctx.sampleRate }; }
+      if (!silentSince) silentSince = performance.now();
+    }
+    if (K.platform === 'android' && (P.external || !P.analysisOK || (silentSince && performance.now() - silentSince > 1200))) natStart();
+    if (natFresh()) { let s = 0; for (let i = 1; i < Math.min(80, nat.freq.length); i++) s += nat.freq[i]; if (s > 0) return { freq: nat.freq, wave: nat.wave, rate: nat.rate }; }
+    return null;
   };
+  K.on('state', s => { if (s !== 'playing' && s !== 'loading') natStop(); silentSince = 0; });
 
   const setVolume = v => {
     v = Math.max(0, Math.min(1, v));
@@ -60,14 +94,16 @@
     return url;
   }
 
-  function stopAll() {
+  function stopAll(next) {
     for (const el of [A, B]) {
       el.pause();
       if (el.srcObject) { el.srcObject.getTracks().forEach(t => t.stop()); el.srcObject = null; }
       el.removeAttribute('src'); el.load();
     }
     if (hls) { hls.destroy(); hls = null; }
-    if (P.external) { try { P.external.pause(); } catch {} }
+    // zelfde autoradio-bron (bv. FM → andere FM-zender): niet uit- en weer aanzetten
+    const same = next && P.external && K.sources && K.sources.externalPlayer(next) === P.external;
+    if (P.external && !same) { try { P.external.pause(); } catch {} }
   }
 
   function attach(el, url) {
@@ -120,13 +156,27 @@
     return portP;
   }
 
+  /* hardwareknoppen (stuur, radioknop) via Android MediaSession */
+  setTimeout(() => {
+    const MS = MSn();
+    if (K.platform !== 'android' || !MS || !MS.addListener) return;
+    MS.addListener('mediaKey', e => K.emit('hwkey', e.key));
+    K.on('state', s => { if (MS.mediaState) MS.mediaState({ playing: s === 'playing' }).catch(() => {}); });
+  }, 0);
+  K.on('hwkey', k => {
+    if (k === 'next') P.next(); else if (k === 'prev') P.prev();
+    else if (k === 'toggle') P.current && P.toggle();
+    else if (k === 'play') { if (P.current && !P.playing) P.toggle(); }
+    else if ((k === 'pause' || k === 'stop') && P.playing) P.toggle();
+  });
+
   P.play = async (item, queue) => {
     if (item.source === 'input') return P.playInput(item.id.slice(3) === 'default' ? '' : item.id.slice(3), item.title).catch(() => K.toast('Geen toegang tot de ingang'));
     if (queue) { P.queue = queue.slice(); P.index = Math.max(0, P.queue.findIndex(x => x.id === item.id)); }
     else if (!P.queue.some(x => x.id === item.id)) { P.queue.push(item); P.index = P.queue.length - 1; }
     else P.index = P.queue.findIndex(x => x.id === item.id);
     P.current = item;
-    stopAll();
+    stopAll(item);
     P.external = null;
     K.emit('track', item);
     K.emit('state', 'loading');

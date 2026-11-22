@@ -146,6 +146,8 @@
         <label class="row"><span>Prestaties</span>
           <select id="setPerf"><option value="auto">Automatisch</option><option value="lite">Licht (zwakke autoradio)</option><option value="full">Volledig (alle effecten)</option></select></label>
         <label class="switch-row"><span>Systeembalk verbergen in autoradio-stijl</span><input type="checkbox" id="setHideBars"><i></i></label>
+        <label class="switch-row"><span>Verder spelen bij het starten<br><small class="hint">Begint meteen met de zender, stream of map van de vorige keer</small></span><input type="checkbox" id="setResume"><i></i></label>
+        <label class="switch-row android-only"><span>Automatisch starten als de radio aangaat<br><small class="hint">Na opstarten en na het wakker worden (contact aan)</small></span><input type="checkbox" id="setAutoStart"><i></i></label>
         <label class="row"><span>Kwaliteit (resolutie)</span>
           <select id="setVizRes"><option value="0.5">Laag (zuinig)</option><option value="0.75">Normaal</option><option value="1">Hoog</option></select></label>
         <label class="switch-row"><span>Alleen werkende zenders tonen</span><input type="checkbox" id="setHideBroken"><i></i></label>
@@ -158,6 +160,8 @@
           <span class="btns" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="dumpAll"> alle apps</label><button id="dumpGo">Start</button></span></div>
         <div class="row hidden" id="naviRow"><span>Navigatie maakt de radio zachter<br><small class="hint" id="naviInfo">De autoradio dempt muziek als de gekozen navigatie-app spreekt</small></span>
           <span class="btns" style="display:flex;gap:8px;flex-wrap:wrap"><button id="naviPick">Navigatie-app kiezen</button></span></div>
+        <div class="row hidden" id="keyRow"><span>Knoppen op de radio koppelen<br><small class="hint" id="keyInfo">Tik op een knop hiernaast en druk binnen 12 seconden op de knop van je radio of stuur</small></span>
+          <span class="btns" style="display:flex;gap:8px;flex-wrap:wrap"><button id="keyNext">Volgende zender</button><button id="keyPrev">Vorige zender</button><button id="keyReset">Standaard</button></span></div>
         <div class="row hidden" id="mtcRow"><span>Autoradio-testpaneel<br><small class="hint">FM, CD/DVD, Bluetooth en navigatie rechtstreeks aansturen, met logboek</small></span><button id="mtcTest">Openen</button></div>
         <div class="row"><span>Apparaat</span><span class="hint" id="devInfo"></span></div>
         <div class="row"><span>Over</span><span class="hint">Klankstroom v1.0 · Endless · <a href="https://github.com/Endless1977/MusicPlayer" target="_blank" rel="noopener">GitHub</a></span></div>
@@ -221,6 +225,7 @@
 <script src="js/sources.js"></script>
 <script src="js/accounts.js"></script>
 <script src="js/library.js"></script>
+<script src="js/presets.js"></script>
 <script src="js/scan.js"></script>
 <script src="js/mtc.js"></script>
 <script src="js/icons.js"></script>

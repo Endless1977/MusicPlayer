@@ -474,7 +474,7 @@
   {
     const showMtc = () => {
       const on = !!(K.mtc && K.mtc.available);
-      $('#naviRow').classList.toggle('hidden', !on); $('#mtcRow').classList.toggle('hidden', !on);
+      $('#naviRow').classList.toggle('hidden', !on); $('#mtcRow').classList.toggle('hidden', !on); $('#keyRow').classList.toggle('hidden', !on);
       if (on && K.mtc.navi) {
         const n = K.mtc.navi, apps = K.scan.getHw();
         $('#naviInfo').textContent = n.app ? 'Nu: ' + ((apps.nav && apps.nav.package === n.app) ? apps.nav.label + ' (' + n.app + ')' : n.app) + ' — de radio wordt zachter als deze spreekt'
@@ -484,6 +484,23 @@
     K.on('mtc', showMtc);
     $('#naviPick').addEventListener('click', () => K.scan.pickNav());
     $('#mtcTest').addEventListener('click', () => K.mtc.openTestPanel());
+    const learn = (act, name) => async () => {
+      $('#keyInfo').textContent = 'Druk nu op de knop voor “' + name + '”…';
+      try { const c = await K.mtc.learnKey(act); $('#keyInfo').textContent = '“' + name + '” gekoppeld aan knopcode ' + c; }
+      catch (e) { $('#keyInfo').textContent = e.message + ' — probeer opnieuw'; }
+    };
+    $('#keyNext').addEventListener('click', learn('next', 'volgende zender'));
+    $('#keyPrev').addEventListener('click', learn('prev', 'vorige zender'));
+    $('#keyReset').addEventListener('click', () => { K.mtc.resetKeys(); $('#keyInfo').textContent = 'Standaardknoppen hersteld'; });
+  }
+  {
+    const MSa = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+    $('#setResume').checked = S.resume !== false;
+    $('#setResume').addEventListener('change', e => { S.resume = e.target.checked; });
+    $('#setAutoStart').checked = S.autoStart !== false;
+    $('#setAutoStart').addEventListener('change', e => { S.autoStart = e.target.checked; if (MSa && MSa.setAutoStart) MSa.setAutoStart({ on: e.target.checked }).catch(() => {}); });
+    if (MSa && MSa.setAutoStart) MSa.setAutoStart({ on: S.autoStart !== false }).catch(() => {});
+    if (K.platform !== 'android') document.querySelectorAll('.android-only').forEach(n => n.classList.add('hidden'));
   }
   /* Systeemverkenner (Android): alleen lezen, resultaat op de SD-kaart */
   {
@@ -630,7 +647,7 @@
   }
   if (M) {
     K.on('mtc', updateMtcPanels);
-    K.on('fmpresets', () => { if (isCar() && B.tab === 'radio' && !B.stack.length && !B.page && !B.searching) renderBrowser(); });
+    K.on('presets', () => { if (isCar() && sheetOpen() && (B.view || B.tab) === 'radio' && !B.stack.length && !B.page && !B.searching) renderBrowser(); });
     K.on('btcall', n => { K.toast('Inkomend gesprek: ' + n); if (isCar()) setTab('phone'); });
   }
   const presetRow = p => ({ icon: 'fm', title: p.name || M.fmtFreq(p.khz), sub: 'FM · ' + M.fmtFreq(p.khz), badge: '', item: M.radio.item(p.khz, p.name), chev: false,
@@ -709,7 +726,7 @@
   async function renderBrowser() {
     if (!car) return;
     const tok = ++renderTok;
-    const root = ROOT[B.tab];
+    const root = ROOT[B.view || B.tab];
     const top = B.stack[B.stack.length - 1];
     const title = B.page ? (B.page === 'settings' ? 'Instellingen' : 'Accounts') : B.searching ? 'Zoeken' : top ? top.title : root.title;
     car.bTitle.textContent = title;
@@ -759,17 +776,238 @@
   }
   const markBrowser = () => { if (car) car.bList.querySelectorAll('.b-row').forEach(n => n.classList.toggle('sel', !!P.current && n.dataset.id === P.current.id)); };
   function setTab(t) {
+    if (t === 'phone') return openSheet('phone');
     if (t === 'cd' && !hasMtc() && K.scan.getHw().disc) K.scan.hw('disc');
-    B.tab = t; B.stack = []; B.q = ''; B.searching = false; B.page = null;
+    const changed = B.tab !== t;
+    B.tab = t; B.stack = []; B.q = ''; B.searching = false; B.page = null; B.view = null;
+    closeSheet(true);
+    renderBrowser(); updateCar(); renderPresets();
+    if (changed || t === 'radio') autoPlayTab(t);
+  }
+  function showPage(v) { B.page = v; openSheet(); renderBrowser(); updateCar(); }
+
+  /* ---- uitschuifscherm (lijsten, instellingen, telefoon) over het midden + de knoppen ---- */
+  const sheetOpen = () => !!car && $('#app').classList.contains('sheet');
+  function openSheet(view) {
+    if (!car) return;
+    if (view !== undefined) { B.view = view; B.stack = []; B.q = ''; B.searching = false; B.page = null; }
+    $('#app').classList.add('sheet');
     renderBrowser(); updateCar();
   }
-  function showPage(v) { B.page = v; renderBrowser(); updateCar(); }
+  function closeSheet(quiet) {
+    if (!car) return;
+    $('#app').classList.remove('sheet');
+    B.view = null; B.page = null; B.stack = []; B.searching = false; B.q = '';
+    if (!quiet) { renderBrowser(); updateCar(); }
+  }
+  app.openSheet = openSheet; app.closeSheet = closeSheet;
+
+  /* ---- Radio kiezen = meteen spelen (laatste zender) ---- */
+  function autoPlayTab(t) {
+    if (t !== 'radio' || !P) return;
+    if (hasMtc()) {
+      if (P.current && P.current.source === 'fm' && P.playing) return;
+      const last = K.LS.get('lastFm', 0), pr = M.radio.presets(), p = pr.find(x => x.khz === last) || pr[0];
+      return P.play(M.radio.item(last || (p && p.khz) || 0, p && p.khz === (last || p.khz) ? p.name : ''), pr.map(x => M.radio.item(x.khz, x.name)));
+    }
+    if (P.current && P.current.kind === 'station' && P.playing) return;
+    const st = K.presets.filled('radio')[0] || K.recent.list.find(x => x.kind === 'station');
+    if (st) P.play(st);
+  }
+  K.on('track', it => { if (it && it.source === 'fm' && it.khz) K.LS.set('lastFm', it.khz); });
+
+  /* ---- voorkeuzeknoppen rechts (zoals een autoradio): FM-zenders, CD-nummers, mappen, streams ---- */
+  const PER = 12;
+  const pg = {};                                   // pagina per tab
+  let presetsMeta = { pages: 1 };
+  const shortName = s => String(s || '').replace(/^(radio|npo)\s+/i, m => m).trim();
+  function presetModel() {
+    const t = B.tab, page = pg[t] || 0;
+    const slots = (kind, label, play, empty) => {
+      const list = K.presets.get(kind);
+      const cells = [];
+      for (let i = page * PER; i < page * PER + PER; i++) {
+        const v = list[i];
+        cells.push(v ? Object.assign({ slot: i, kind, item: v }, label(v, i), { tap: () => play(v, i), hold: () => presetMenu(kind, i, v) })
+          : { slot: i, kind, empty: true, label: String(i + 1), sub: '', tap: () => empty(i), hold: () => presetMenu(kind, i, null) });
+      }
+      return { cells, pages: Math.ceil(K.presets.SLOTS / PER) };
+    };
+    if (t === 'radio' && hasMtc()) {
+      const r = slots('fm', v => ({ label: v.name || M.fmtFreq(v.khz).replace(' MHz', ''), sub: v.name ? M.fmtFreq(v.khz).replace(' MHz', '') : 'MHz',
+          on: P.current && P.current.source === 'fm' && M.fm.khz === v.khz }),
+        v => P.play(M.radio.item(v.khz, v.name), M.radio.presets().map(x => M.radio.item(x.khz, x.name))),
+        i => { if (P.current && P.current.source === 'fm' && M.fm.khz) M.radio.save(i); else K.toast('Stem eerst af op een zender (Tuner), tik dan op een lege knop'); });
+      r.special = { icon: 'fm', label: 'Tuner', tap: () => openSheet('radio') };
+      return r;
+    }
+    if (t === 'radio' || t === 'stream') {
+      const kind = t === 'radio' ? 'radio' : 'stream';
+      const r = slots(kind, v => ({ label: v.title || v.name || '?', sub: v.kind === 'station' ? (v.country || v.codec || 'zender') : (v.artist || ''), on: P.current && P.current.id === v.id }),
+        v => P.play(v, K.presets.filled(kind)),
+        i => bigSearch({ mode: kind === 'radio' ? 'station' : 'all', assign: it => { K.presets.set(kind, i, it); K.toast('Knop ' + (i + 1) + ': ' + it.title); P.play(it); } }));
+      r.special = { icon: 'search', label: 'Zoeken', tap: () => bigSearch({ mode: kind === 'radio' ? 'station' : 'all' }) };
+      return r;
+    }
+    if (t === 'cd') {
+      if (!hasMtc()) return { cells: [], pages: 1, note: 'CD-bediening werkt op de autoradio', special: { icon: 'disc', label: 'CD-app', tap: () => K.scan.hw('disc') } };
+      const cnt = Math.max(parseInt(M.dvd.cnt, 10) || 0, 12), cur = parseInt(M.dvd.idx, 10) || 0;
+      const cells = [];
+      for (let n = page * PER + 1; n <= Math.min(cnt, page * PER + PER); n++)
+        cells.push({ label: 'Track ' + n, sub: '', on: P.current && P.current.source === 'cd' && cur === n,
+          tap: async () => { if (!P.current || P.current.source !== 'cd') await P.play(M.dvd.item()); return M.dvd.track(n); } });
+      return { cells, pages: Math.ceil(cnt / PER), special: { icon: 'disc', label: 'CD-menu', tap: () => openSheet('cd') } };
+    }
+    if (t === 'usb') {
+      const byF = new Map();
+      for (const tr of K.library.tracks) { const f = folderOf(tr) || tr.origin || 'Muziek'; if (!byF.has(f)) byF.set(f, []); byF.get(f).push(tr); }
+      const folders = [...byF.entries()].sort((x, y) => x[0].localeCompare(y[0], 'nl', { numeric: true }));
+      const curF = P.current && P.current.source === 'local' ? (folderOf(P.current) || P.current.origin || 'Muziek') : null;
+      const cells = folders.slice(page * PER, page * PER + PER).map(([f, ts]) => ({ label: f.split('/').pop(), sub: ts.length + '', on: f === curF,
+        tap: () => P.play(ts[0], ts), hold: () => openSheet() }));
+      return { cells, pages: Math.max(1, Math.ceil(folders.length / PER)), note: folders.length ? '' : 'Nog geen muziek: scan de SD-kaart',
+        special: { icon: 'folder', label: 'Bladeren', tap: () => openSheet() } };
+    }
+    return { cells: [], pages: 1 };
+  }
+  function renderPresets() {
+    if (!car || !car.presets) return;
+    let m = presetModel(); const t = B.tab;
+    if ((pg[t] || 0) >= m.pages) { pg[t] = 0; m = presetModel(); }
+    presetsMeta = m;
+    const sig = t + '|' + (pg[t] || 0) + '|' + m.pages + '|' + (m.note || '') + '|' + (m.special ? m.special.label : '') + '|' + m.cells.map(c => c.label + '~' + c.sub + '~' + !!c.on + '~' + !!c.empty).join('|');
+    if (sig === car.presetSig) return;
+    car.presetSig = sig;
+    const g = car.presetGrid; g.innerHTML = '';
+    for (const c of m.cells) {
+      const b = el('button', { class: 'pz' + (c.on ? ' on' : '') + (c.empty ? ' empty' : '') },
+        el('span', { class: 'pz-l' }, c.label), c.sub ? el('span', { class: 'pz-s' }, c.sub) : null);
+      let timer = 0, held = false;
+      b.addEventListener('pointerdown', () => { held = false; clearTimeout(timer); if (c.hold) timer = setTimeout(() => { held = true; c.hold(); }, 650); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(timer)));
+      b.addEventListener('click', e => { e.preventDefault(); if (held) return; c.tap(); });
+      b.addEventListener('contextmenu', e => e.preventDefault());
+      g.append(b);
+    }
+    for (let i = m.cells.length; i < PER; i++) g.append(el('div', { class: 'pz ghost' }));
+    car.presetNote.textContent = m.note || ''; car.presetNote.classList.toggle('hidden', !m.note);
+    car.presetSpecial.innerHTML = I(m.special ? m.special.icon : 'search') + '<span>' + (m.special ? m.special.label : '') + '</span>';
+    car.presetSpecial.classList.toggle('hidden', !m.special);
+    car.presetSpecial.onclick = () => m.special && m.special.tap();
+    const p = pg[t] || 0;
+    car.pgNext.disabled = p >= m.pages - 1; car.pgPrev.disabled = p <= 0;
+    car.pgInfo.textContent = m.pages > 1 ? (p + 1) + '/' + m.pages : '';
+  }
+  app.renderPresets = renderPresets;
+  K.on('presets', () => renderPresets());
+  K.on('mtc', () => renderPresets());
+  K.on('library', () => renderPresets());
+  K.on('hwkey', k => {
+    const m = /^preset:(\d+)$/.exec(k); if (!m) return;
+    const kind = hasMtc() ? 'fm' : 'stream', v = K.presets.at(kind, +m[1]);
+    if (!v) return;
+    if (kind === 'fm') P.play(M.radio.item(v.khz, v.name), M.radio.presets().map(x => M.radio.item(x.khz, x.name))); else P.play(v);
+  });
+
+  /* bij het starten: verder spelen waar je was (radio, stream of USB) */
+  setTimeout(() => {
+    if (S.resume === false || P.current) return;
+    const it = K.recent.list[0];
+    if (!it) return;
+    if (it.source === 'fm' && !hasMtc()) return;
+    if (it.source === 'local' && !K.library.tracks.some(t => t.id === it.id)) return;
+    if (isCar()) { const tab = it.source === 'fm' || it.kind === 'station' ? 'radio' : it.source === 'local' ? 'usb' : it.source === 'cd' ? 'cd' : 'stream'; B.tab = tab; renderBrowser(); updateCar(); }
+    P.play(it);
+  }, 2500);
+  const pageBy = d => { const t = B.tab; pg[t] = Math.max(0, Math.min(presetsMeta.pages - 1, (pg[t] || 0) + d)); renderPresets(); };
+
+  /* lang drukken op een voorkeuzeknop: opslaan / vervangen / wissen */
+  function presetMenu(kind, i, v) {
+    const cur = P.current;
+    const opts = [];
+    if (kind === 'fm') { if (hasMtc() && M.fm.khz) opts.push(['star', 'Huidige zender hier opslaan (' + (M.fm.psn || M.fmtFreq(M.fm.khz)) + ')', () => M.radio.save(i)]); }
+    else {
+      if (cur && cur.source !== 'fm' && cur.source !== 'cd' && cur.source !== 'bt' && cur.source !== 'local' && (kind !== 'radio' || cur.kind === 'station'))
+        opts.push(['star', 'Wat nu speelt hier opslaan (' + cur.title + ')', () => { K.presets.set(kind, i, cur); K.toast('Knop ' + (i + 1) + ': ' + cur.title); }]);
+      opts.push(['search', v ? 'Vervangen: zoeken…' : 'Zoeken en hier opslaan…', () => bigSearch({ mode: kind === 'stream' ? 'all' : 'station', assign: it => { K.presets.set(kind, i, it); K.toast('Knop ' + (i + 1) + ': ' + it.title); P.play(it); } })]);
+    }
+    if (v) opts.push(['close', 'Knop ' + (i + 1) + ' wissen', () => K.presets.clear(kind, i)]);
+    if (!opts.length) return;
+    const ov = el('div', { class: 'pz-menu', onclick: e => { if (e.target === ov) ov.remove(); } },
+      el('div', { class: 'pz-box' }, el('div', { class: 'pz-h' }, 'Voorkeuzeknop ' + (i + 1) + (v ? ' — ' + (v.name || v.title || M.fmtFreq(v.khz)) : '')),
+        ...opts.map(([ic, lb, fn]) => el('button', { class: 'pz-opt', html: I(ic) + '<span>' + lb + '</span>', onclick: () => { ov.remove(); fn(); } })),
+        el('button', { class: 'pz-opt cancel', onclick: () => ov.remove() }, 'Annuleren')));
+    document.body.append(ov);
+  }
+
+  /* ---- groot zoekscherm voor streams en zenders ---- */
+  function bigSearch(opt = {}) {
+    $('#bigSearch') && $('#bigSearch').remove();
+    let mode = opt.mode === 'station' ? 'station' : (opt.kind || 'station');
+    const input = el('input', { type: 'search', class: 'bs-in', placeholder: opt.assign ? 'Zoek wat er op deze knop moet…' : 'Zender, artiest of nummer…', enterkeyhint: 'search' });
+    const list = el('div', { class: 'bs-list' });
+    const chips = el('div', { class: 'bs-chips' });
+    const setMode = m => { mode = m; chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m)); if (input.value.trim()) go(); };
+    if (opt.mode !== 'station') chips.append(
+      el('button', { 'data-m': 'station', class: 'on', html: I('tower') + '<span>Zenders</span>', onclick: () => setMode('station') }),
+      el('button', { 'data-m': 'track', html: I('music') + '<span>Nummers</span>', onclick: () => setMode('track') }));
+    let tok = 0;
+    const row = it => {
+      const r = el('div', { class: 'bs-row' },
+        el('div', { class: 'bs-ic' }, coverEl(it, 'bs-noimg')),
+        el('div', { class: 'bs-txt' }, el('div', { class: 'bs-t' }, it.title || ''), el('div', { class: 'bs-s' }, [it.artist, it.country, it.codec && it.bitrate ? it.codec + ' ' + it.bitrate + ' kbps' : it.codec].filter(Boolean).join(' · '))));
+      if (opt.assign) r.append(el('span', { class: 'bs-act', html: I('star') }));
+      else {
+        const kind = it.kind === 'station' && B.tab === 'radio' && !hasMtc() ? 'radio' : 'stream';
+        r.append(el('button', { class: 'bs-act', title: 'Op een voorkeuzeknop', html: I('plus'), onclick: e => {
+          e.stopPropagation(); const i = K.presets.firstFree(kind);
+          if (i < 0) return K.toast('Alle knoppen zijn vol');
+          K.presets.set(kind, i, it); K.toast('Op knop ' + (i + 1) + ' gezet');
+        } }));
+      }
+      r.addEventListener('click', () => { if (opt.assign) { ov.remove(); opt.assign(it); } else { P.play(it, it.kind === 'station' ? undefined : undefined); ov.remove(); } });
+      return r;
+    };
+    async function go() {
+      const q = input.value.trim(); if (!q) return;
+      input.blur();
+      const my = ++tok;
+      list.innerHTML = '<div class="bs-note">Zoeken…</div>';
+      try {
+        if (mode === 'station') {
+          const l = await K.radio.search({ name: q, country: '' });
+          if (my !== tok) return;
+          list.innerHTML = ''; if (!l.length) list.innerHTML = '<div class="bs-note">Niets gevonden</div>';
+          for (const s of l.slice(0, 80)) list.append(row(s));
+        } else {
+          list.innerHTML = ''; let n = 0;
+          await K.sources.searchAll(q, (p, items) => { if (my !== tok) return; for (const it of items) if (it.kind === 'track') { list.append(row(it)); n++; } });
+          if (my === tok && !n) list.innerHTML = '<div class="bs-note">Niets gevonden</div>';
+        }
+      } catch { if (my === tok) list.innerHTML = '<div class="bs-note">' + (navigator.onLine ? 'Zoeken lukt nu niet' : 'Geen internet') + '</div>'; }
+    }
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    const ov = el('div', { id: 'bigSearch' },
+      el('div', { class: 'bs-bar' },
+        el('button', { class: 'bs-close', html: I('back') + '<span>Terug</span>', onclick: () => ov.remove() }),
+        input,
+        el('button', { class: 'bs-go', html: I('search'), onclick: go })),
+      chips, list);
+    if (!opt.mode || opt.mode === 'station') list.innerHTML = '<div class="bs-note">' + (opt.assign ? 'Zoek een zender en tik erop: die komt op de knop.' : 'Typ een naam en tik op het vergrootglas. Met + zet je een zender op een voorkeuzeknop.') + '</div>';
+    else list.innerHTML = '<div class="bs-note">' + (opt.assign ? 'Zoek een zender of nummer en tik erop: die komt op de knop.' : 'Typ een naam en tik op het vergrootglas. Met + zet je iets op een voorkeuzeknop.') + '</div>';
+    document.body.append(ov);
+    setTimeout(() => input.focus(), 80);
+  }
+  app.bigSearch = bigSearch;
 
   function goBack() {
     if (!saver.classList.contains('hidden')) return closeSaver();
     if (isFullscreen()) return exitFullscreen();
     if ($('#scanDialog').open) return $('#scanDialog').close();
+    if ($('.pz-menu')) return $('.pz-menu').remove();
+    if ($('#bigSearch')) return $('#bigSearch').remove();
     if (isCar() && browserBack()) return;
+    if (sheetOpen()) return closeSheet();
     if (!isCar() && app.view !== 'radio') return app.show('radio');
   }
   app.goBack = goBack;
@@ -791,9 +1029,9 @@
       btnI('cs-btn', 'back', '', goBack, { title: 'Terug' }));
     car.tiles = el('nav', { id: 'carTiles' },
       btnI('tile', 'nav', 'Navigatie', () => K.scan.hw('nav'), { 'data-tile': 'nav' }),
-      btnI('tile', 'music', 'Media', () => { B.page = null; renderBrowser(); updateCar(); }, { 'data-tile': 'media' }),
-      btnI('tile', 'phone', 'Telefoon', () => hasMtc() ? setTab('phone') : K.scan.hw('phone'), { 'data-tile': 'phone' }),
-      btnI('tile', 'gear', 'Instellingen', () => showPage('settings'), { 'data-tile': 'settings' }));
+      btnI('tile', 'music', 'Media', () => closeSheet(), { 'data-tile': 'media' }),
+      btnI('tile', 'phone', 'Telefoon', () => hasMtc() ? openSheet('phone') : K.scan.hw('phone'), { 'data-tile': 'phone' }),
+      btnI('tile', 'gear', 'Instellingen', () => sheetOpen() && B.page === 'settings' ? closeSheet() : showPage('settings'), { 'data-tile': 'settings' }));
     car.center = el('section', { id: 'carCenter' });
     car.tabs = el('div', { id: 'carTabs' }, ...[['radio', 'tower', 'Radio'], ['cd', 'disc', 'CD'], ['usb', 'usb', 'USB'], ['stream', 'globe', 'Stream']]
       .map(([id, ic, lb]) => btnI('tab', ic, lb, () => setTab(id), { 'data-tab': id })));
@@ -820,10 +1058,18 @@
     car.bList = el('div', { class: 'b-list' });
     car.card2Title = el('div', { class: 'c2-t' }); car.card2Sub = el('div', { class: 'c2-s' });
     car.card2 = el('div', { class: 'b-card hidden', html: I('folder', 'c2-ic') }, car.card2Title, car.card2Sub);
+    car.bClose = btnI('b-hbtn b-close', 'close', '', () => closeSheet(), { title: 'Sluiten' });
     car.browser = el('div', { id: 'carBrowser' },
-      el('div', { class: 'b-head' }, car.bBack, el('span', { class: 'b-hic', html: I('folder') }), car.bTitle, car.bSearchBtn),
+      el('div', { class: 'b-head' }, car.bBack, el('span', { class: 'b-hic', html: I('folder') }), car.bTitle, car.bSearchBtn, car.bClose),
       car.bSearch, car.bList, car.card2);
     car.panel.append(car.browser);
+    car.presetGrid = el('div', { class: 'pz-grid' });
+    car.presetNote = el('div', { class: 'pz-note hidden' });
+    car.presetSpecial = el('button', { class: 'pz-sp' });
+    car.pgNext = el('button', { class: 'pz-pg', html: '<span>Volgende</span>' + I('arrdown'), onclick: () => pageBy(1) });
+    car.pgPrev = el('button', { class: 'pz-pg', html: '<span>Vorige</span>' + I('arrup'), onclick: () => pageBy(-1) });
+    car.pgInfo = el('span', { class: 'pz-pi' });
+    car.presets = el('aside', { id: 'carPresets' }, car.presetGrid, car.presetNote, car.presetSpecial, el('div', { class: 'pz-pager' }, car.pgNext, car.pgPrev), car.pgInfo);
     car.bottom = el('footer', { id: 'carBottom' },
       el('div', { class: 'cb-deco' }, el('img', { src: 'icons/wapen.svg', alt: '' })),
       el('div', { class: 'cb-btns' },
@@ -832,12 +1078,9 @@
         btnI('cb', 'star', 'Favoriet', () => $('#pFav').click(), { id: 'cbFav' }),
         el('button', { class: 'cb cb-sw', id: 'cbViz', onclick: toggleViz, html: '<span class="cb-row">' + I('wave') + '<span class="sw"></span></span><span>Visualizer</span>' }),
         el('button', { class: 'cb cb-sw', id: 'cbSaver', onclick: toggleSaver, html: '<span class="cb-row">' + I('monitor') + '<span class="sw"></span></span><span>Screensaver</span>' }),
-        el('div', { class: 'cb vol' },
-          el('button', { class: 'cb-mute', id: 'cbMute', onclick: () => P.toggleMute(), html: I('volume') }),
-          el('input', { type: 'range', id: 'cbVol', min: 0, max: 1, step: .01, value: S.volume }))));
+        btnI('cb', 'volume', 'Geluid', () => P.toggleMute(), { id: 'cbMute' })));
     $('#ccSeek', car.card).addEventListener('input', e => { seeking = true; setProg(e.target.value / 10); });
     $('#ccSeek', car.card).addEventListener('change', e => { seeking = false; P.seek(e.target.value / 1000); });
-    $('#cbVol', car.bottom).addEventListener('input', e => { P.setVolume(+e.target.value); $('#pVol').value = e.target.value; });
   }
 
   function setLayout() {
@@ -850,7 +1093,7 @@
       if (!car) buildCar();
       remember($('#stage')); remember($('#miniViz')); remember($('#main'));
       appEl.prepend(car.status);
-      appEl.append(car.tiles, car.center, car.panel, car.bottom);
+      appEl.append(car.tiles, car.center, car.presets, car.panel, car.bottom);
       car.center.append($('#stage'), car.tabs, car.card);
       car.panel.append($('#main'));
       $('#stage').append($('#miniViz'));
@@ -858,7 +1101,7 @@
       appEl.classList.add('car');
       document.body.classList.add('car-body');
       if (!K.LS.get('carVizSet', false)) { K.LS.set('carVizSet', true); S.vizMode = 'mountains'; S.vizVariant = 1; }
-      renderBrowser();
+      renderBrowser(); renderPresets();
     } else {
       restore($('#miniViz')); restore($('#stage')); restore($('#main'));
       $('#main').classList.remove('car-page');
@@ -878,7 +1121,10 @@
   function updateCar() {
     if (!car || !isCar()) return;
     const it = P.current;
-    car.tiles.querySelectorAll('.tile').forEach(b => b.classList.toggle('on', b.dataset.tile === (B.page ? 'settings' : 'media')));
+    const tl = sheetOpen() ? (B.page === 'settings' ? 'settings' : B.view === 'phone' ? 'phone' : 'media') : 'media';
+    car.tiles.querySelectorAll('.tile').forEach(b => b.classList.toggle('on', b.dataset.tile === tl));
+    car.bClose.classList.toggle('hidden', !sheetOpen());
+    renderPresets();
     car.tabs.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === B.tab));
     const cov = $('#ccCover'); cov.innerHTML = '';
     if (it) cov.append(coverEl(it, 'cc-noimg')); else cov.append(el('img', { src: 'icons/wapen.svg', alt: '', class: 'cc-logo' }));
@@ -898,7 +1144,6 @@
     $('#cbViz').classList.toggle('on', S.viz);
     $('#cbSaver').classList.toggle('on', S.saver);
     $('#cbMute').innerHTML = I(P.muted ? 'mute' : 'volume');
-    $('#cbVol').value = S.volume;
     $('#csNet').innerHTML = I(navigator.onLine ? 'wifi' : 'nowifi');
     $('#csNet').classList.toggle('off', !navigator.onLine);
     markBrowser();

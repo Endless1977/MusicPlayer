@@ -29,19 +29,28 @@
   /* ---------- FM-radio ---------- */
   const toKhz = v => { v = +v || 0; return v > 1e6 ? Math.round(v / 1000) : v > 20000 ? v : v > 0 ? v * 10 : 0; };
   M.radio = {
-    async on() { if (M.source !== 'fm') { await set('av_channel_enter=fm'); M.source = 'fm'; } },
-    async off() { if (M.source === 'fm') { await set('av_channel_exit=fm'); M.source = 'sys'; } },
+    async on() { if (M.source !== 'fm') { M.source = 'fm'; await set('av_channel_enter=fm'); } },
+    async off() { if (M.source === 'fm') { M.source = 'sys'; await set('av_channel_exit=fm'); } },
     tune: khz => set('ctl_radio_frequency=' + Math.round(khz)),
     seek: dir => set('ctl_radio_seek=' + dir),     // up | down | auto
     step: dir => set('ctl_radio_tune=' + dir),     // up | down
-    presets() { return K.LS.get('fmPresets', []); },
-    save() {
-      const list = M.radio.presets().filter(p => p.khz !== M.fm.khz);
-      list.push({ khz: M.fm.khz, name: M.fm.psn || '' });
-      list.sort((a, b) => a.khz - b.khz);
-      K.LS.set('fmPresets', list); K.emit('fmpresets'); K.toast('Zender opgeslagen: ' + M.fmtFreq(M.fm.khz));
+    presets() { return K.presets.filled('fm'); },
+    save(slot) {
+      if (!M.fm.khz) return K.toast('Nog geen zender afgestemd');
+      const list = K.presets.get('fm');
+      if (slot == null) { if (list.some(p => p && p.khz === M.fm.khz)) return K.toast('Staat al op een voorkeuzeknop'); slot = K.presets.firstFree('fm'); }
+      if (slot < 0) return K.toast('Alle voorkeuzeknoppen zijn vol');
+      K.presets.set('fm', slot, { khz: M.fm.khz, name: M.fm.psn || '' });
+      K.toast('Knop ' + (slot + 1) + ': ' + (M.fm.psn || M.fmtFreq(M.fm.khz)));
     },
-    remove(khz) { K.LS.set('fmPresets', M.radio.presets().filter(p => p.khz !== khz)); K.emit('fmpresets'); },
+    /* volgende/vorige voorkeuzezender; zonder (genoeg) voorkeuzes: zoeken */
+    hop(dir) {
+      const list = M.radio.presets();
+      if (list.length < 2) return M.radio.seek(dir > 0 ? 'up' : 'down');
+      const i = list.findIndex(p => p.khz === M.fm.khz);
+      const n = list[(i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length)];
+      return K.player.play(M.radio.item(n.khz, n.name), list.map(p => M.radio.item(p.khz, p.name)));
+    },
     item(khz, name) {
       khz = khz || M.fm.khz;
       return { kind: 'station', source: 'fm', id: 'fm:' + khz, khz, title: name || M.fmtFreq(khz), artist: 'FM-radio · ' + M.fmtFreq(khz), cover: '' };
@@ -51,10 +60,22 @@
   /* ---------- DVD / CD ---------- */
   const dvdCode = c => 0x20000 | (c << 8) | (c ^ 2);
   M.DVD = { play: 22, playpause: 13, stop: 15, next: 23, prev: 24, fwd: 20, back: 21, repeat: 29, title: 31, osd: 37 };
-  M.dvd.on = async () => { if (M.source !== 'dvd') { await set('av_channel_enter=dvd'); M.source = 'dvd'; } };
-  M.dvd.off = async () => { if (M.source === 'dvd') { await set('av_channel_exit=dvd'); M.source = 'sys'; } };
+  M.dvd.on = async () => { if (M.source !== 'dvd') { M.source = 'dvd'; await set('av_channel_enter=dvd'); } };
+  M.dvd.off = async () => { if (M.source === 'dvd') { M.source = 'sys'; await set('av_channel_exit=dvd'); } };
   M.dvd.cmd = c => set('ctl_dvd_cmd=' + dvdCode(c));
   M.dvd.eject = () => set('ctl_dvd_door=open');
+  /* naar nummer n: met volgende/vorige vanaf het huidige nummer, anders met cijfertoetsen */
+  M.dvd.track = async n => {
+    if (M.source !== 'dvd') { await M.dvd.on(); await M.dvd.cmd(M.DVD.play); await new Promise(r => setTimeout(r, 600)); await M.dvd.poll(); }
+    const cur = parseInt(M.dvd.idx, 10);
+    if (cur > 0) {
+      const d = n - cur;
+      for (let i = 0; i < Math.abs(d); i++) { await M.dvd.cmd(d > 0 ? M.DVD.next : M.DVD.prev); await new Promise(r => setTimeout(r, 160)); }
+    } else {
+      for (const ch of String(n)) { await M.dvd.cmd(+ch + 1); await new Promise(r => setTimeout(r, 160)); }
+    }
+    M.dvd.idx = String(n); changedSoon(); setTimeout(M.dvd.poll, 900);
+  };
   M.dvd.poll = async () => {
     for (const [k, p] of [['title', 'sta_dvd_title='], ['pos', 'sta_dvd_position='], ['len', 'sta_dvd_length='], ['idx', 'sta_dvd_media_idx='], ['cnt', 'sta_dvd_media_cnt='], ['state', 'sta_dvd=']]) {
       try { const v = (await MS().mtcGet({ param: p })).value; M.dvd[k] = valOf(v); M.dvd.raw[p] = v; } catch {}
@@ -93,7 +114,7 @@
     fm: {
       play: async item => { await M.radio.on(); if (item.khz && item.khz !== M.fm.khz) await M.radio.tune(item.khz); },
       pause: () => M.radio.off(), resume: () => M.radio.on(),
-      next: () => M.radio.seek('up'), prev: () => M.radio.seek('down')
+      next: () => M.radio.hop(1), prev: () => M.radio.hop(-1)
     },
     cd: {
       play: async () => { await M.dvd.on(); await M.dvd.cmd(M.DVD.play); },
@@ -112,6 +133,23 @@
     if (M.source === 'fm') await M.radio.off();
     else if (M.source === 'dvd') await M.dvd.off();
   };
+
+  /* ---------- knoppen op de radio / het stuur (MCU "KeyDown") ---------- */
+  // standaardcodes uit de radio-app van de fabrikant; zelf te leren in Instellingen
+  const KEYS = { next: [0x10c, 0x12c, 0x14f], prev: [0x104, 0x12b, 0x14e],
+    'preset:0': [0x11b], 'preset:1': [0x11c], 'preset:2': [0x11d], 'preset:3': [0x11e], 'preset:4': [0x11f], 'preset:5': [0x120] };
+  let learn = null;
+  M.learnKey = action => new Promise((res, rej) => {
+    const t = setTimeout(() => { learn = null; rej(new Error('Geen knop gedrukt')); }, 12000);
+    learn = code => {
+      clearTimeout(t);
+      const map = K.LS.get('mtcKeys', {});
+      for (const k of Object.keys(map)) map[k] = map[k].filter(c => c !== code);
+      (map[action] = map[action] || []).push(code);
+      K.LS.set('mtcKeys', map); res(code);
+    };
+  });
+  M.resetKeys = () => K.LS.set('mtcKeys', {});
 
   /* ---------- meldingen van de MCU ---------- */
   function onEvent(e) {
@@ -135,6 +173,13 @@
           K.emit('track', cur);
         }
       }
+    } else if (e.obj === 'KeyDown') {
+      const code = +d.value;
+      log('← knop ' + code + ' (0x' + code.toString(16) + ')');
+      if (learn) { const f = learn; learn = null; f(code); return; }
+      const map = Object.assign({}, KEYS, K.LS.get('mtcKeys', {}));
+      const act = Object.keys(map).find(k => map[k].includes(code));
+      if (act) K.emit('hwkey', act);
     } else {
       log('← ' + e.obj + ' ' + JSON.stringify(d));
       if (e.obj === 'Dvd') M.dvd.poll();
