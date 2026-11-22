@@ -17,6 +17,12 @@ import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import android.provider.MediaStore;
 import android.view.Window;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.media.audiofx.Visualizer;
+import android.media.session.MediaSession;
+import android.media.session.PlaybackState;
+import android.view.KeyEvent;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -50,7 +56,8 @@ import java.util.Set;
     permissions = {
         @Permission(alias = "audio33", strings = { Manifest.permission.READ_MEDIA_AUDIO }),
         @Permission(alias = "audioLegacy", strings = { Manifest.permission.READ_EXTERNAL_STORAGE }),
-        @Permission(alias = "notify", strings = { Manifest.permission.POST_NOTIFICATIONS })
+        @Permission(alias = "notify", strings = { Manifest.permission.POST_NOTIFICATIONS }),
+        @Permission(alias = "mic", strings = { Manifest.permission.RECORD_AUDIO })
     }
 )
 public class MediaScanPlugin extends Plugin {
@@ -257,6 +264,132 @@ public class MediaScanPlugin extends Plugin {
         call.resolve(r);
     }
 
+    // ------------------------------------------------ automatisch starten, hardwareknoppen, geluidsanalyse
+    private BroadcastReceiver accReceiver;
+    private MediaSession session;
+
+    @Override
+    public void load() {
+        super.load();
+        Context ctx = getContext().getApplicationContext();
+        // ACC aan (autoradio uit slaapstand): app naar voren halen als automatisch starten aan staat
+        accReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                if ("accon".equals(i.getStringExtra("accstate")) && BootReceiver.enabled(c)) BootReceiver.launch(c);
+                JSObject e = new JSObject(); e.put("state", i.getStringExtra("accstate")); notifyListeners("acc", e);
+            }
+        };
+        try { ctx.registerReceiver(accReceiver, new IntentFilter("com.microntek.acc")); } catch (Throwable ignored) {}
+        // MediaSession: stuur- en radioknoppen (volgende/vorige/play) komen hier binnen
+        try {
+            session = new MediaSession(ctx, "Klankstroom");
+            session.setCallback(new MediaSession.Callback() {
+                private void key(String k) { JSObject e = new JSObject(); e.put("key", k); notifyListeners("mediaKey", e); }
+                @Override public void onPlay() { key("play"); }
+                @Override public void onPause() { key("pause"); }
+                @Override public void onStop() { key("stop"); }
+                @Override public void onSkipToNext() { key("next"); }
+                @Override public void onSkipToPrevious() { key("prev"); }
+                @Override public void onFastForward() { key("next"); }
+                @Override public void onRewind() { key("prev"); }
+                @Override public boolean onMediaButtonEvent(Intent i) {
+                    KeyEvent ev = i.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+                    if (ev != null && ev.getAction() == KeyEvent.ACTION_DOWN) {
+                        switch (ev.getKeyCode()) {
+                            case KeyEvent.KEYCODE_MEDIA_NEXT: case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: key("next"); return true;
+                            case KeyEvent.KEYCODE_MEDIA_PREVIOUS: case KeyEvent.KEYCODE_MEDIA_REWIND: key("prev"); return true;
+                            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE: case KeyEvent.KEYCODE_HEADSETHOOK: key("toggle"); return true;
+                            case KeyEvent.KEYCODE_MEDIA_PLAY: key("play"); return true;
+                            case KeyEvent.KEYCODE_MEDIA_PAUSE: key("pause"); return true;
+                            default: break;
+                        }
+                    }
+                    return super.onMediaButtonEvent(i);
+                }
+            });
+            session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+            setSessionState(false);
+            session.setActive(true);
+        } catch (Throwable ignored) { session = null; }
+    }
+
+    private void setSessionState(boolean playing) {
+        if (session == null) return;
+        session.setPlaybackState(new PlaybackState.Builder()
+            .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
+                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP)
+            .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, 0, 1f).build());
+    }
+
+    /** speelstatus doorgeven, zodat Android de knoppen naar Klankstroom stuurt */
+    @PluginMethod
+    public void mediaState(PluginCall call) {
+        setSessionState(Boolean.TRUE.equals(call.getBoolean("playing", false)));
+        if (session != null && !session.isActive()) session.setActive(true);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setAutoStart(PluginCall call) {
+        getContext().getSharedPreferences(BootReceiver.PREFS, 0).edit().putBoolean("autostart", Boolean.TRUE.equals(call.getBoolean("on", true))).apply();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void launchInfo(PluginCall call) {
+        JSObject r = new JSObject();
+        Intent i = getActivity().getIntent();
+        r.put("autostart", i != null && i.getBooleanExtra("autostart", false));
+        call.resolve(r);
+    }
+
+    // geluidsanalyse van alles wat Android afspeelt (reserve als de WebView-analyse stil blijft)
+    private Visualizer viz;
+
+    @PluginMethod
+    public void vizStart(PluginCall call) {
+        if (getPermissionState("mic") != PermissionState.GRANTED) {
+            if (Boolean.TRUE.equals(call.getBoolean("ask", false))) { requestPermissionForAlias("mic", call, "vizPermCallback"); return; }
+            call.reject("geen toestemming"); return;
+        }
+        try {
+            if (viz == null) {
+                viz = new Visualizer(0);
+                viz.setEnabled(false);
+                viz.setCaptureSize(Math.min(1024, Visualizer.getCaptureSizeRange()[1]));
+                int rate = Math.min(Visualizer.getMaxCaptureRate(), 25000);
+                viz.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
+                    @Override public void onWaveFormDataCapture(Visualizer v, byte[] w, int sr) {}
+                    @Override public void onFftDataCapture(Visualizer v, byte[] f, int sr) {
+                        int n = f.length / 2;
+                        StringBuilder sb = new StringBuilder(n * 3);
+                        for (int k = 1; k < n; k++) {
+                            float re = f[2 * k], im = f[2 * k + 1];
+                            int m = (int) Math.min(255, Math.hypot(re, im) * 2.2);
+                            sb.append(m).append(',');
+                        }
+                        JSObject e = new JSObject(); e.put("fft", sb.toString()); e.put("rate", sr / 1000);
+                        notifyListeners("vizData", e);
+                    }
+                }, rate, false, true);
+            }
+            viz.setEnabled(true);
+            call.resolve();
+        } catch (Throwable t) { viz = null; call.reject(String.valueOf(t)); }
+    }
+
+    @PermissionCallback
+    private void vizPermCallback(PluginCall call) {
+        call.getData().put("ask", false);
+        vizStart(call);
+    }
+
+    @PluginMethod
+    public void vizStop(PluginCall call) {
+        try { if (viz != null) viz.setEnabled(false); } catch (Throwable ignored) {}
+        call.resolve();
+    }
+
     // ------------------------------------------------ statusbalk/navigatiebalk verbergen ("immersive sticky")
     // Tikken of de volumeknop laten de balken nu even als doorzichtige laag verschijnen; ze verdwijnen vanzelf
     // en de app verspringt niet (de insets blijven gelijk).
@@ -265,6 +398,7 @@ public class MediaScanPlugin extends Plugin {
         Window w = getActivity().getWindow();
         WindowInsetsControllerCompat c = WindowCompat.getInsetsController(w, w.getDecorView());
         if (immersive) {
+            WindowCompat.setDecorFitsSystemWindows(w, false);   // venster wordt nooit kleiner als een balk verschijnt
             c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             c.hide(WindowInsetsCompat.Type.systemBars());
         } else c.show(WindowInsetsCompat.Type.systemBars());
@@ -350,7 +484,13 @@ public class MediaScanPlugin extends Plugin {
     }
 
     @Override
-    protected void handleOnDestroy() { if (mtc != null) mtc.close(); super.handleOnDestroy(); }
+    protected void handleOnDestroy() {
+        if (mtc != null) mtc.close();
+        try { if (viz != null) viz.release(); } catch (Throwable ignored) {}
+        try { if (session != null) session.release(); } catch (Throwable ignored) {}
+        try { if (accReceiver != null) getContext().getApplicationContext().unregisterReceiver(accReceiver); } catch (Throwable ignored) {}
+        super.handleOnDestroy();
+    }
 
     /** Systeemverkenner: alleen lezen, schrijft naar de SD-kaart. Voortgang via event "dumpProgress". */
     @PluginMethod

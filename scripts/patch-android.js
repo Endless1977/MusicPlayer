@@ -10,7 +10,7 @@ if (!fs.existsSync(app)) { console.error('android/ ontbreekt: eerst "npx cap add
 // 1. Java-bestanden kopiëren
 const pkgDir = path.join(app, 'java', 'nl', 'endless', 'klankstroom');
 fs.mkdirSync(pkgDir, { recursive: true });
-for (const f of ['MediaScanPlugin.java', 'PlaybackService.java', 'StreamProxy.java', 'SystemDump.java', 'MtcBridge.java'])
+for (const f of ['MediaScanPlugin.java', 'PlaybackService.java', 'StreamProxy.java', 'SystemDump.java', 'MtcBridge.java', 'BootReceiver.java'])
   fs.copyFileSync(path.join(root, 'android-plugin', f), path.join(pkgDir, f));
 
 // 2. Plugin registreren in MainActivity
@@ -42,7 +42,8 @@ const perms = [
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.ACCESS_WIFI_STATE',
   'android.permission.RECORD_AUDIO',
-  'android.permission.MODIFY_AUDIO_SETTINGS'
+  'android.permission.MODIFY_AUDIO_SETTINGS',
+  'android.permission.RECEIVE_BOOT_COMPLETED'
 ];
 for (const p of perms) {
   const name = p.split('"')[0];
@@ -62,6 +63,17 @@ if (!man.includes('<queries>')) {
 if (!man.includes('PlaybackService')) {
   man = man.replace('</application>',
     '        <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n    </application>');
+}
+if (!man.includes('BootReceiver')) {
+  man = man.replace('</application>', `        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.microntek.acc" />
+                <action android:name="com.microntek.bootcheck" />
+            </intent-filter>
+        </receiver>
+    </application>`);
 }
 if (!man.includes('nl.endless.klankstroom" android:host="spotify')) {
   man = man.replace(/(<activity[^>]*MainActivity[\s\S]*?)(<\/activity>)/,
