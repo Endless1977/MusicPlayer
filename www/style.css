@@ -535,3 +535,7 @@ body.nobars #mtcPanel{padding:0}
 #app.car.portrait .pz-pager{grid-template-columns:1fr 1fr}
 #app.car.portrait #carPanel{grid-column:1;grid-row:2/4}
 #app.car.sheet #carPanel{background:linear-gradient(180deg,#0e2856,#051028)}
+#app.car.portrait .pz{font-size:14px;padding:3px 4px}
+#app.car.portrait .pz-l{-webkit-line-clamp:2}
+#app.car.portrait .pz-sp{min-height:44px;font-size:17px}
+#app.car.portrait .pz-pg{min-height:40px;font-size:13px;flex-direction:row;gap:6px}

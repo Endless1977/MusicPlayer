@@ -13,11 +13,17 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 
 ## Screenshots
 
-**Autoradio (9 inch, 1024×600):** tegels links, visualizer + speler in het midden, bladerlijst rechts
+**Autoradio (9 inch, 1024×600):** tegels links, visualizer en speler in het midden, voorkeuzeknoppen rechts
 
-![Autoradio-indeling met radio en Neon-bergen](docs/screenshots/autoradio-radio.png)
-
-![Autoradio-indeling met USB-mappen en VizLab-straaljager](docs/screenshots/autoradio-usb-straaljager.png)
+| Radio (FM-tuner van de auto) | CD |
+|---|---|
+| ![Radio met FM-voorkeuzeknoppen](docs/screenshots/autoradio/1-radio.png) | ![CD met tracknummers](docs/screenshots/autoradio/2-cd.png) |
+| **USB / SD-kaart: mappen als knoppen** | **Stream: zelf geprogrammeerde knoppen** |
+| ![USB-mappen](docs/screenshots/autoradio/8-usb.png) | ![Stream-voorkeuzes](docs/screenshots/autoradio/4-media-stream.png) |
+| **Groot zoekscherm** | **Telefoon via Bluetooth** |
+| ![Zoeken](docs/screenshots/autoradio/7-zoeken.png) | ![Telefoon](docs/screenshots/autoradio/3-telefoon-bt.png) |
+| **Instellingen** | **Visualizer volledig scherm (één tik)** |
+| ![Instellingen](docs/screenshots/autoradio/6-instellingen.png) | ![Volledig scherm](docs/screenshots/autoradio/5-volledig-scherm.png) |
 
 | Telefoon | Pc |
 |---|---|
@@ -41,7 +47,9 @@ Eén app voor **radio**, **legale gratis muziek**, **je eigen (betaalde) account
 | 💽 **Bibliotheek** | Lokale muziek met ID3-titels en -hoezen. Werkt **volledig offline**. |
 | 📡 **Scanknop** | **Android:** interne opslag, **SD-kaart**, USB-sticks, **USB-CD-speler**, de ingebouwde **FM-radio**-app van je telefoon en audio-ingangen. **Pc:** alle schijven, USB/SD, **CD-station** en de map Muziek. |
 | 🌀 **Visualizer** | De 11 scènes van het **Klankstroom VizLab** (Straaljager, Auto, Windhond, Caleidoscoop, Wormgat, Golfbergen, Sterrenstorm, Oscilloscoop, Klankbol, Boombox, Fractal-caleidoscoop), **Neon-bergen** en de 3D-scènes in vizz.fm-stijl, elk met **16 varianten**, plus klassieke effecten in Drempels-stijl. Eén tik = volledig scherm; met 🌀 zet je hem **aan/uit**. Afstellen via Instellingen → VizLab openen. |
-| 🚗 **Autoradio-indeling** | Grote tegels (Navigatie, Media, Telefoon, Instellingen), tabbladen Radio/CD/USB/Stream en een bladerlijst. Navigatie, Telefoon, FM en CD openen de apps van je autoradio. Staande variant voor de telefoon. |
+| 🚗 **Autoradio-indeling** | Grote tegels (Navigatie, Media, Telefoon, Instellingen), tabbladen Radio/CD/USB/Stream en rechts **voorkeuzeknoppen** zoals op een echte autoradio: FM-zenders, CD-tracks, de **mappen van je SD-kaart** en zelf te programmeren streams (3 pagina's van 12, lang drukken = opslaan/wissen). Zoeken gebeurt in een groot, duidelijk zoekscherm. Lijsten, instellingen en telefoon schuiven over het midden. Staande variant voor de telefoon. |
+| 📻 **Autoradio-hardware (Microntek/HCT MTCD/MTCE, bv. PX5)** | Klankstroom stuurt de radio rechtstreeks aan, zonder de apps van de fabrikant: **FM-tuner** (afstemmen, zoeken, scannen, RDS-naam en -tekst), **CD/DVD** (afspelen, tracks, spoelen, uitwerpen), **Bluetooth-telefoon** (bellen, opnemen, ophangen, kiespad, belgeschiedenis, muziek van je telefoon) en de **navigatie-onderdrukking** (radio zachter als de navigatie spreekt). De knoppen op de radio en het stuur werken mee en zijn zelf te koppelen. Zie [docs/mtce-api.md](docs/mtce-api.md). |
+| ⏻ **Automatisch starten** | Start mee als de radio opstart of het contact aangaat, en speelt verder waar je was (zender, stream of map). Kiest je Radio, dan speelt de laatste zender meteen. Beide uit te zetten. |
 | 🖥 **Screensaver** | Na een instelbare tijd zonder bediening verschijnt de visualizer schermvullend, met titel en klok. Zet je hem aan of uit met de knop 🖥 of in Instellingen. |
 
 ### Sneltoetsen (pc)
@@ -77,9 +85,9 @@ De webversie draait met elke statische server: `npx http-server www`.
 
 - **Zwakke autoradio's (bv. PX5/RK3368 met PowerVR):** de app herkent de grafische chip en zet de **lichte modus** aan: geen gloedschaduwen, visualizer op halve resolutie zonder bloom, max. 30 beelden/s. Instelbaar onder Instellingen → Prestaties. In de autoradio-stijl wordt de Android-systeembalk verborgen voor meer ruimte (uit te zetten).
 
-- **Visualizer bij radio:** veel radiostreams sturen geen CORS-headers. In de browser kan de app het geluid van zulke streams dan niet analyseren, en volgt de visualizer een gesimuleerd ritme. In de pc-app en voor lokale bestanden reageert hij altijd op het echte geluid.
+- **Visualizer bij radio:** veel radiostreams sturen geen CORS-headers. In de browser kan de app het geluid van zulke streams dan niet analyseren, en volgt de visualizer een gesimuleerd ritme. In de pc-app en de Android-app reageert hij op het echte geluid; blijft de analyse in Android stil, dan luistert de app mee via Android zelf (vraagt één keer microfoontoestemming, er wordt niets opgenomen). FM, CD en Bluetooth op de autoradio lopen buiten Android om; daar volgt de visualizer een geschat ritme.
 - **Audio-CD’s:** Windows en Android geven CD-audio (CDDA) niet als bestand vrij. Data-CD’s met MP3’s werken wel. Een losse CD-speler of radio kun je via een **lijn-ingang** laten meespelen (scanknop → Audio-ingangen).
-- **FM-radio:** Android heeft geen standaard-API voor de FM-chip. De app zoekt de FM-app van de fabrikant (Samsung, Xiaomi, Motorola, Qualcomm/OnePlus, enz.) en opent die. De meeste nieuwe telefoons hebben geen FM meer.
+- **FM-radio:** op Microntek/HCT-autoradio's bedient de app de tuner zelf. Op andere apparaten heeft Android geen standaard-API voor de FM-chip; dan zoekt de app de FM-app van de fabrikant (Samsung, Xiaomi, Motorola, Qualcomm/OnePlus, enz.) en opent die.
 - **Spotify:** maak een gratis app op developer.spotify.com en vul de Client-ID en Redirect-URI in die op de Accounts-pagina staan (pc: `http://127.0.0.1:43117/index.html`, Android: `nl.endless.klankstroom://spotify`).
 - Je inloggegevens blijven alleen op je eigen apparaat.
 
@@ -95,8 +103,10 @@ www/                 de app (HTML/CSS/JS), gedeeld door web, pc en Android
   js/accounts.js     Spotify, Navidrome/Subsonic
   js/library.js      lokale bibliotheek (IndexedDB)
   js/scan.js         scanknop
+  js/mtc.js          autoradio-hardware: FM, CD/DVD, Bluetooth, navigatie, radioknoppen
+  js/presets.js      voorkeuzeknoppen
 electron/            pc-app
-android-plugin/      Java: MediaScan-plugin + achtergrond-afspeeldienst
+android-plugin/      Java: MediaScan-plugin, MtcBridge (autoradio), BootReceiver (automatisch starten), afspeeldienst
 scripts/patch-android.js
 .github/workflows/build.yml
 ```
