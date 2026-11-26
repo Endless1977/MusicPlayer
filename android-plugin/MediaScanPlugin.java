@@ -147,7 +147,7 @@ public class MediaScanPlugin extends Plugin {
             volumes.put(v);
             Uri uri = Build.VERSION.SDK_INT >= 29 ? MediaStore.Audio.Media.getContentUri(vol) : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
             String[] proj = { MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA };
+                MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.TRACK };
             String sel = MediaStore.Audio.Media.IS_MUSIC + " != 0 OR " + MediaStore.Audio.Media.DURATION + " > 60000";
             try (Cursor c = cr.query(uri, proj, sel, null, MediaStore.Audio.Media.ARTIST + " ASC")) {
                 if (c == null) continue;
@@ -159,6 +159,7 @@ public class MediaScanPlugin extends Plugin {
                     t.put("album", c.getString(3));
                     t.put("duration", c.getLong(4));
                     t.put("path", c.getString(5));
+                    t.put("track", c.getInt(6));
                     t.put("uri", ContentUris.withAppendedId(uri, id).toString());
                     t.put("volume", vol);
                     t.put("volumeLabel", v.getString("label"));
@@ -397,12 +398,43 @@ public class MediaScanPlugin extends Plugin {
     private void applyImmersive() {
         Window w = getActivity().getWindow();
         WindowInsetsControllerCompat c = WindowCompat.getInsetsController(w, w.getDecorView());
+        android.view.View wv = getBridge().getWebView();
+        android.view.View content = w.getDecorView().findViewById(android.R.id.content);
         if (immersive) {
             WindowCompat.setDecorFitsSystemWindows(w, false);   // venster wordt nooit kleiner als een balk verschijnt
+            // insets negeren: geen enkele balk of pop-up (bv. het volumevenster van de radio) mag de app laten verspringen
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content, (v, ins) -> { v.setPadding(0, 0, 0, 0); return WindowInsetsCompat.CONSUMED; });
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(wv, (v, ins) -> WindowInsetsCompat.CONSUMED);
+            content.setPadding(0, 0, 0, 0);
+            if (wv.getLayoutParams() instanceof android.view.ViewGroup.MarginLayoutParams) {
+                android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) wv.getLayoutParams();
+                lp.setMargins(0, 0, 0, 0);
+                wv.setLayoutParams(lp);
+            }
+            if (Build.VERSION.SDK_INT >= 28) {
+                android.view.WindowManager.LayoutParams a = w.getAttributes();
+                a.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                w.setAttributes(a);
+            }
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN);
             c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             c.hide(WindowInsetsCompat.Type.systemBars());
+            // komt er toch een balk tevoorschijn (pop-up van de radio), dan na 2 s weer verbergen
+            w.getDecorView().setOnSystemUiVisibilityChangeListener(vis -> {
+                if (immersive && (vis & android.view.View.SYSTEM_UI_FLAG_FULLSCREEN) == 0)
+                    w.getDecorView().postDelayed(() -> { if (immersive) c.hide(WindowInsetsCompat.Type.systemBars()); }, 2000);
+            });
+        } else if (wasImmersive) {
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            w.getDecorView().setOnSystemUiVisibilityChangeListener(null);
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content, null);
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(wv, null);
+            c.show(WindowInsetsCompat.Type.systemBars());
+            androidx.core.view.ViewCompat.requestApplyInsets(w.getDecorView());
         } else c.show(WindowInsetsCompat.Type.systemBars());
+        wasImmersive = immersive;
     }
+    private boolean wasImmersive;
 
     @PluginMethod
     public void setImmersive(PluginCall call) {

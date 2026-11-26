@@ -1,6 +1,8 @@
 package nl.endless.klankstroom;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.RandomAccessFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -79,6 +81,8 @@ public class StreamProxy implements Runnable {
                 return;
             }
             String path = req[1];
+            if (path.startsWith("/m")) { meta(out); return; }
+            if (path.startsWith("/f")) { file(out, method, path, range); return; }
             int q = path.indexOf("u=");
             if (q < 0) { error(out, 400); return; }
             String target = URLDecoder.decode(path.substring(q + 2).split("&")[0], "UTF-8");
@@ -93,7 +97,7 @@ public class StreamProxy implements Runnable {
                 c.setConnectTimeout(12000);
                 c.setReadTimeout(30000);
                 c.setRequestProperty("User-Agent", "Klankstroom/1.0 (Android)");
-                c.setRequestProperty("Icy-MetaData", "0");
+                c.setRequestProperty("Icy-MetaData", "1");
                 c.setRequestProperty("Accept", "*/*");
                 if (range != null) c.setRequestProperty("Range", range);
                 code = c.getResponseCode();
@@ -124,9 +128,42 @@ public class StreamProxy implements Runnable {
             if ("HEAD".equals(method)) return;
 
             InputStream up = c.getInputStream();
+            int metaint = 0;
+            try { metaint = Integer.parseInt(String.valueOf(c.getHeaderField("icy-metaint")).trim()); } catch (Exception ignored) {}
+            String icyName = c.getHeaderField("icy-name");
+            synchronized (StreamProxy.class) { metaUrl = target; metaTitle = ""; metaName = icyName == null ? "" : icyName; }
             byte[] buf = new byte[16384];
             int n;
-            while ((n = up.read(buf)) != -1) { out.write(buf, 0, n); }
+            if (metaint <= 0) {
+                while ((n = up.read(buf)) != -1) { out.write(buf, 0, n); }
+            } else {
+                // ICY: titel van het nummer uit de stream halen en de metadata-blokken eruit filteren
+                int left = metaint;
+                while (true) {
+                    n = up.read(buf, 0, Math.min(buf.length, left));
+                    if (n == -1) break;
+                    out.write(buf, 0, n);
+                    left -= n;
+                    if (left == 0) {
+                        int lb = up.read();
+                        if (lb < 0) break;
+                        int ml = lb * 16;
+                        if (ml > 0) {
+                            byte[] m = new byte[ml];
+                            int got = 0;
+                            while (got < ml) { int r = up.read(m, got, ml - got); if (r < 0) break; got += r; }
+                            String s = new String(m, 0, got, StandardCharsets.UTF_8);
+                            int a = s.indexOf("StreamTitle='");
+                            if (a >= 0) {
+                                int b = s.indexOf("';", a + 13);
+                                String t = b > a ? s.substring(a + 13, b) : s.substring(a + 13);
+                                synchronized (StreamProxy.class) { if (target.equals(metaUrl)) metaTitle = t.trim(); }
+                            }
+                        }
+                        left = metaint;
+                    }
+                }
+            }
             out.flush();
         } catch (Exception e) {
             /* speler sluit verbinding (pauze/volgende zender) of stream valt weg */
@@ -134,6 +171,76 @@ public class StreamProxy implements Runnable {
             if (c != null) c.disconnect();
             try { sock.close(); } catch (IOException ignored) {}
         }
+    }
+
+    // laatst bekende nummertitel van de stream die nu doorgegeven wordt
+    private static String metaUrl = "", metaTitle = "", metaName = "";
+
+    private static String js(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        for (char ch : (s == null ? "" : s).toCharArray()) {
+            if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+            else if (ch < 32) b.append(' ');
+            else b.append(ch);
+        }
+        return b.append('"').toString();
+    }
+
+    private static void meta(OutputStream out) throws IOException {
+        String body;
+        synchronized (StreamProxy.class) { body = "{\"u\":" + js(metaUrl) + ",\"title\":" + js(metaTitle) + ",\"name\":" + js(metaName) + "}"; }
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache\r\nContent-Length: "
+            + b.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+        out.write(b);
+    }
+
+    /** lokaal bestand (SD-kaart/USB) met Range-ondersteuning: goed doorspoelen, nette 'einde', echte analyse */
+    private static void file(OutputStream out, String method, String path, String range) throws IOException {
+        int q = path.indexOf("p=");
+        if (q < 0) { error(out, 400); return; }
+        File f = new File(URLDecoder.decode(path.substring(q + 2).split("&")[0], "UTF-8"));
+        if (!f.isFile() || !f.canRead()) { error(out, 404); return; }
+        long size = f.length(), start = 0, end = size - 1;
+        boolean part = false;
+        if (range != null && range.startsWith("bytes=")) {
+            try {
+                String[] r = range.substring(6).split(",")[0].split("-", -1);
+                if (!r[0].isEmpty()) { start = Long.parseLong(r[0].trim()); if (r.length > 1 && !r[1].trim().isEmpty()) end = Long.parseLong(r[1].trim()); }
+                else if (r.length > 1) { start = Math.max(0, size - Long.parseLong(r[1].trim())); }
+                part = true;
+            } catch (Exception ignored) { start = 0; end = size - 1; part = false; }
+        }
+        if (end >= size) end = size - 1;
+        if (start > end) {
+            out.write(("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */" + size + "\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+            return;
+        }
+        String n = f.getName().toLowerCase();
+        String type = n.endsWith(".mp3") ? "audio/mpeg" : n.endsWith(".flac") ? "audio/flac" : n.endsWith(".ogg") || n.endsWith(".oga") ? "audio/ogg"
+            : n.endsWith(".opus") ? "audio/ogg" : n.endsWith(".wav") ? "audio/wav" : n.endsWith(".m4a") || n.endsWith(".aac") || n.endsWith(".mp4") ? "audio/mp4"
+            : n.endsWith(".wma") ? "audio/x-ms-wma" : "application/octet-stream";
+        long len = end - start + 1;
+        StringBuilder h = new StringBuilder();
+        h.append("HTTP/1.1 ").append(part ? "206 Partial Content" : "200 OK").append("\r\n");
+        h.append("Content-Type: ").append(type).append("\r\nAccess-Control-Allow-Origin: *\r\nAccept-Ranges: bytes\r\n");
+        h.append("Content-Length: ").append(len).append("\r\n");
+        if (part) h.append("Content-Range: bytes ").append(start).append('-').append(end).append('/').append(size).append("\r\n");
+        h.append("Connection: close\r\n\r\n");
+        out.write(h.toString().getBytes(StandardCharsets.ISO_8859_1));
+        if ("HEAD".equals(method)) return;
+        try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
+            raf.seek(start);
+            byte[] buf = new byte[65536];
+            long left = len;
+            while (left > 0) {
+                int r = raf.read(buf, 0, (int) Math.min(buf.length, left));
+                if (r < 0) break;
+                out.write(buf, 0, r);
+                left -= r;
+            }
+        }
+        out.flush();
     }
 
     private static void error(OutputStream out, int code) throws IOException {
