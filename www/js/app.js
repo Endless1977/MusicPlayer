@@ -491,10 +491,18 @@
     };
     $('#keyNext').addEventListener('click', learn('next', 'volgende zender'));
     $('#keyPrev').addEventListener('click', learn('prev', 'vorige zender'));
+    $('#keyKnobL').addEventListener('click', learn('seekdown', 'draaiknop linksom (zoeken omlaag)'));
+    $('#keyKnobR').addEventListener('click', learn('seekup', 'draaiknop rechtsom (zoeken omhoog)'));
     $('#keyReset').addEventListener('click', () => { K.mtc.resetKeys(); $('#keyInfo').textContent = 'Standaardknoppen hersteld'; });
   }
   {
     const MSa = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
+    const applyTheme = () => { if (S.theme) document.body.dataset.theme = S.theme; else delete document.body.dataset.theme; };
+    applyTheme();
+    $('#setTheme').value = S.theme || '';
+    $('#setTheme').addEventListener('change', e => { S.theme = e.target.value; applyTheme(); });
+    $('#setTicker').checked = S.ticker !== false;
+    $('#setTicker').addEventListener('change', e => { S.ticker = e.target.checked; K.emit('ticker'); });
     $('#setResume').checked = S.resume !== false;
     $('#setResume').addEventListener('change', e => { S.resume = e.target.checked; });
     $('#setAutoStart').checked = S.autoStart !== false;
@@ -586,7 +594,7 @@
         mBtn('next', '', () => M.radio.seek('up'))),
       el('div', { class: 'm-row' },
         mBtn('star', '', () => M.radio.save()),
-        mBtn('scan', 'Scan', () => { if (!fmPlaying()) P.play(M.radio.item()); return M.radio.seek('auto'); }),
+        mBtn('scan', 'Snel scannen', () => { if (M.fm.fastScan) return M.radio.stopScan(); if (!fmPlaying()) P.play(M.radio.item()); return M.radio.fastScan(); }, 'scanbtn'),
         mBtn('', 'MHz…', async () => {
           const v = prompt('Frequentie in MHz (bv. 103,5)'); if (!v) return;
           const khz = Math.round(parseFloat(v.replace(',', '.')) * 1000); if (!(khz > 60000 && khz < 110000)) return K.toast('Ongeldige frequentie');
@@ -633,6 +641,7 @@
     if (q('fmFreq')) {
       q('fmFreq').textContent = M.fmtFreq(M.fm.khz); q('fmPs').textContent = M.fm.psn || (M.fm.seeking ? 'Zoeken…' : '');
       q('fmRt').textContent = M.fm.rt || '';
+      const sb = document.querySelector('.fm-panel .scanbtn span'); if (sb) sb.textContent = M.fm.fastScan ? 'Stop scan (' + M.fm.scan.length + ')' : 'Snel scannen';
       q('fmMeta').textContent = [M.source === 'fm' ? 'FM aan' : 'FM uit', M.fm.stereo ? 'stereo' : '', M.fm.strength ? 'signaal ' + M.fm.strength : '', M.fm.scan.length ? M.fm.scan.length + ' gevonden' : ''].filter(Boolean).join(' · ');
     }
     if (q('cdTitle')) {
@@ -647,7 +656,8 @@
   }
   if (M) {
     K.on('mtc', updateMtcPanels);
-    K.on('presets', () => { if (isCar() && sheetOpen() && (B.view || B.tab) === 'radio' && !B.stack.length && !B.page && !B.searching) renderBrowser(); });
+    K.on('fmscan', () => { if (isCar() && sheetOpen() && (B.view || B.tab) === 'radio' && !B.stack.length && !B.page) renderBrowser(); });
+  K.on('presets', () => { if (isCar() && sheetOpen() && (B.view || B.tab) === 'radio' && !B.stack.length && !B.page && !B.searching) renderBrowser(); });
     K.on('btcall', n => { K.toast('Inkomend gesprek: ' + n); if (isCar()) setTab('phone'); });
   }
   const presetRow = p => ({ icon: 'fm', title: p.name || M.fmtFreq(p.khz), sub: 'FM · ' + M.fmtFreq(p.khz), badge: '', item: M.radio.item(p.khz, p.name), chev: false,
@@ -658,6 +668,17 @@
       const rows = [];
       if (hasMtc()) {
         rows.push({ node: fmPanel() });
+        if (M.fm.scan.length && !M.fm.fastScan) {
+          rows.push({ node: el('div', { class: 'm-row scanres' },
+            el('span', { class: 'scan-h' }, M.fm.scan.length + ' zenders gevonden'),
+            mBtn('star', 'Aanvullen', () => M.radio.storeScan(false)),
+            mBtn('', 'Alles vervangen', () => M.radio.storeScan(true))) });
+          for (const k of M.fm.scan) {
+            const nm = (M.fm.names || {})[k] || '';
+            rows.push({ icon: 'fm', title: nm || M.fmtFreq(k), sub: nm ? M.fmtFreq(k) : 'FM', chev: false, cover: M.logo(nm),
+              onclick: () => P.play(M.radio.item(k, nm), M.fm.scan.map(x => M.radio.item(x))) });
+          }
+        }
         for (const p of M.radio.presets()) rows.push(presetRow(p));
         rows.push({ icon: 'fm', title: 'Radio-app van de fabrikant', sub: (K.scan.getHw().radio || {}).label || 'Openen als reserve', chev: true, onclick: () => K.scan.hw('radio') });
         setTimeout(updateMtcPanels, 0);
@@ -819,6 +840,7 @@
   /* ---- voorkeuzeknoppen rechts (zoals een autoradio): FM-zenders, CD-nummers, mappen, streams ---- */
   const PER = 12;
   const pg = {};                                   // pagina per tab
+  let usbFolder = null;                            // geopende map in de USB-knoppen
   let presetsMeta = { pages: 1 };
   const shortName = s => String(s || '').replace(/^(radio|npo)\s+/i, m => m).trim();
   function presetModel() {
@@ -834,16 +856,19 @@
       return { cells, pages: Math.ceil(K.presets.SLOTS / PER) };
     };
     if (t === 'radio' && hasMtc()) {
-      const r = slots('fm', v => ({ label: v.name || M.fmtFreq(v.khz).replace(' MHz', ''), sub: v.name ? M.fmtFreq(v.khz).replace(' MHz', '') : 'MHz',
+      const r = slots('fm', v => ({ icon: M.logo(v.name || (M.fm.names || {})[v.khz]), label: v.name || M.fmtFreq(v.khz).replace(' MHz', ''), sub: v.name ? M.fmtFreq(v.khz).replace(' MHz', '') : 'MHz',
           on: P.current && P.current.source === 'fm' && M.fm.khz === v.khz }),
         v => P.play(M.radio.item(v.khz, v.name), M.radio.presets().map(x => M.radio.item(x.khz, x.name))),
         i => { if (P.current && P.current.source === 'fm' && M.fm.khz) M.radio.save(i); else K.toast('Stem eerst af op een zender (Tuner), tik dan op een lege knop'); });
-      r.special = { icon: 'fm', label: 'Tuner', tap: () => openSheet('radio') };
+      r.specials = [
+        { icon: 'prev', label: '', title: 'Zoek omlaag', tap: () => { if (!fmPlaying()) P.play(M.radio.item()); return M.radio.seek('down'); } },
+        { icon: '', label: 'Tuner', tap: () => openSheet('radio') },
+        { icon: 'next', label: '', title: 'Zoek omhoog', tap: () => { if (!fmPlaying()) P.play(M.radio.item()); return M.radio.seek('up'); } }];
       return r;
     }
     if (t === 'radio' || t === 'stream') {
       const kind = t === 'radio' ? 'radio' : 'stream';
-      const r = slots(kind, v => ({ label: v.title || v.name || '?', sub: v.kind === 'station' ? (v.country || v.codec || 'zender') : (v.artist || ''), on: P.current && P.current.id === v.id }),
+      const r = slots(kind, v => ({ icon: v.cover || '', label: v.title || v.name || '?', sub: v.kind === 'station' ? (v.country || v.codec || 'zender') : (v.artist || ''), on: P.current && P.current.id === v.id }),
         v => P.play(v, K.presets.filled(kind)),
         i => bigSearch({ mode: kind === 'radio' ? 'station' : 'all', assign: it => { K.presets.set(kind, i, it); K.toast('Knop ' + (i + 1) + ': ' + it.title); P.play(it); } }));
       r.special = { icon: 'search', label: 'Zoeken', tap: () => bigSearch({ mode: kind === 'radio' ? 'station' : 'all' }) };
@@ -863,8 +888,22 @@
       for (const tr of K.library.tracks) { const f = folderOf(tr) || tr.origin || 'Muziek'; if (!byF.has(f)) byF.set(f, []); byF.get(f).push(tr); }
       const folders = [...byF.entries()].sort((x, y) => x[0].localeCompare(y[0], 'nl', { numeric: true }));
       const curF = P.current && P.current.source === 'local' ? (folderOf(P.current) || P.current.origin || 'Muziek') : null;
-      const cells = folders.slice(page * PER, page * PER + PER).map(([f, ts]) => ({ label: f.split('/').pop(), sub: ts.length + '', on: f === curF,
-        tap: () => P.play(ts[0], ts), hold: () => openSheet() }));
+      const open = usbFolder && byF.has(usbFolder) ? usbFolder : null;
+      if (open) {
+        // nummers van de geopende map, in dezelfde knopstijl
+        const ts = K.library.folderOrder(byF.get(open));
+        const pgK = 'usb:' + open, p = pg[pgK] || 0;
+        const cells = ts.slice(p * PER, p * PER + PER).map((tr, k) => {
+          const n = (parseInt(tr.track, 10) % 1000) || (p * PER + k + 1);
+          return { label: tr.title || K.parseName(tr.path || '').title, sub: String(n), on: P.current && P.current.id === tr.id,
+            tap: () => P.play(tr, ts) };
+        });
+        return { cells, pages: Math.max(1, Math.ceil(ts.length / PER)), pageKey: pgK, title: open,
+          special: { icon: 'up', label: 'Mappen', tap: () => { usbFolder = null; renderPresets(); } } };
+      }
+      const cells = folders.slice(page * PER, page * PER + PER).map(([f, ts]) => ({ label: f.split('/').pop(), sub: ts.length + '', on: f === curF, folder: true,
+        tap: () => { usbFolder = f; const list = K.library.folderOrder(ts); if (!(P.current && list.some(x => x.id === P.current.id) && P.playing)) P.play(list[0], list); renderPresets(); },
+        hold: () => openSheet() }));
       return { cells, pages: Math.max(1, Math.ceil(folders.length / PER)), note: folders.length ? '' : 'Nog geen muziek: scan de SD-kaart',
         special: { icon: 'folder', label: 'Bladeren', tap: () => openSheet() } };
     }
@@ -872,15 +911,16 @@
   }
   function renderPresets() {
     if (!car || !car.presets) return;
-    let m = presetModel(); const t = B.tab;
-    if ((pg[t] || 0) >= m.pages) { pg[t] = 0; m = presetModel(); }
+    let m = presetModel(); let t = m.pageKey || B.tab;
+    if ((pg[t] || 0) >= m.pages) { pg[t] = 0; m = presetModel(); t = m.pageKey || B.tab; }
     presetsMeta = m;
-    const sig = t + '|' + (pg[t] || 0) + '|' + m.pages + '|' + (m.note || '') + '|' + (m.special ? m.special.label : '') + '|' + m.cells.map(c => c.label + '~' + c.sub + '~' + !!c.on + '~' + !!c.empty).join('|');
+    const sig = t + '|' + (m.title || '') + '|' + (pg[t] || 0) + '|' + m.pages + '|' + (m.note || '') + '|' + (m.specials || (m.special ? [m.special] : [])).map(s => s.icon + s.label).join(',') + '|' + m.cells.map(c => c.label + '~' + c.sub + '~' + !!c.on + '~' + !!c.empty + '~' + (c.icon || '')).join('|');
     if (sig === car.presetSig) return;
     car.presetSig = sig;
     const g = car.presetGrid; g.innerHTML = '';
     for (const c of m.cells) {
-      const b = el('button', { class: 'pz' + (c.on ? ' on' : '') + (c.empty ? ' empty' : '') },
+      const b = el('button', { class: 'pz' + (c.on ? ' on' : '') + (c.empty ? ' empty' : '') + (c.folder ? ' fold' : '') },
+        c.icon ? el('img', { class: 'pz-ic', src: c.icon, alt: '', onerror: e => e.target.remove() }) : null,
         el('span', { class: 'pz-l' }, c.label), c.sub ? el('span', { class: 'pz-s' }, c.sub) : null);
       let timer = 0, held = false;
       b.addEventListener('pointerdown', () => { held = false; clearTimeout(timer); if (c.hold) timer = setTimeout(() => { held = true; c.hold(); }, 650); });
@@ -890,10 +930,13 @@
       g.append(b);
     }
     for (let i = m.cells.length; i < PER; i++) g.append(el('div', { class: 'pz ghost' }));
+    car.presetTitle.textContent = m.title || ''; car.presetTitle.classList.toggle('hidden', !m.title);
     car.presetNote.textContent = m.note || ''; car.presetNote.classList.toggle('hidden', !m.note);
-    car.presetSpecial.innerHTML = I(m.special ? m.special.icon : 'search') + '<span>' + (m.special ? m.special.label : '') + '</span>';
-    car.presetSpecial.classList.toggle('hidden', !m.special);
-    car.presetSpecial.onclick = () => m.special && m.special.tap();
+    const sp = m.specials || (m.special ? [m.special] : []);
+    car.presetSpecial.innerHTML = '';
+    for (const s of sp) car.presetSpecial.append(el('button', { class: 'pz-spb' + (s.label ? '' : ' ico'), title: s.title || s.label, html: (s.icon ? I(s.icon) : '') + (s.label ? '<span>' + s.label + '</span>' : ''),
+      onclick: async () => { try { await s.tap(); } catch (e) { K.toast('Mislukt: ' + (e.message || e)); } } }));
+    car.presetSpecial.classList.toggle('hidden', !sp.length);
     const p = pg[t] || 0;
     car.pgNext.disabled = p >= m.pages - 1; car.pgPrev.disabled = p <= 0;
     car.pgInfo.textContent = m.pages > 1 ? (p + 1) + '/' + m.pages : '';
@@ -903,6 +946,10 @@
   K.on('mtc', () => renderPresets());
   K.on('library', () => renderPresets());
   K.on('hwkey', k => {
+    if (k === 'seekup' || k === 'seekdown') {
+      if (hasMtc() && P.current && P.current.source === 'fm') return M.radio.seek(k === 'seekup' ? 'up' : 'down');
+      return k === 'seekup' ? P.next() : P.prev();
+    }
     const m = /^preset:(\d+)$/.exec(k); if (!m) return;
     const kind = hasMtc() ? 'fm' : 'stream', v = K.presets.at(kind, +m[1]);
     if (!v) return;
@@ -919,7 +966,7 @@
     if (isCar()) { const tab = it.source === 'fm' || it.kind === 'station' ? 'radio' : it.source === 'local' ? 'usb' : it.source === 'cd' ? 'cd' : 'stream'; B.tab = tab; renderBrowser(); updateCar(); }
     P.play(it);
   }, 2500);
-  const pageBy = d => { const t = B.tab; pg[t] = Math.max(0, Math.min(presetsMeta.pages - 1, (pg[t] || 0) + d)); renderPresets(); };
+  const pageBy = d => { const t = presetsMeta.pageKey || B.tab; pg[t] = Math.max(0, Math.min(presetsMeta.pages - 1, (pg[t] || 0) + d)); renderPresets(); };
 
   /* lang drukken op een voorkeuzeknop: opslaan / vervangen / wissen */
   function presetMenu(kind, i, v) {
@@ -1065,11 +1112,12 @@
     car.panel.append(car.browser);
     car.presetGrid = el('div', { class: 'pz-grid' });
     car.presetNote = el('div', { class: 'pz-note hidden' });
-    car.presetSpecial = el('button', { class: 'pz-sp' });
+    car.presetSpecial = el('div', { class: 'pz-sp' });
     car.pgNext = el('button', { class: 'pz-pg', html: '<span>Volgende</span>' + I('arrdown'), onclick: () => pageBy(1) });
     car.pgPrev = el('button', { class: 'pz-pg', html: '<span>Vorige</span>' + I('arrup'), onclick: () => pageBy(-1) });
     car.pgInfo = el('span', { class: 'pz-pi' });
-    car.presets = el('aside', { id: 'carPresets' }, car.presetGrid, car.presetNote, car.presetSpecial, el('div', { class: 'pz-pager' }, car.pgNext, car.pgPrev), car.pgInfo);
+    car.presetTitle = el('div', { class: 'pz-title hidden' });
+    car.presets = el('aside', { id: 'carPresets' }, car.presetTitle, car.presetGrid, car.presetNote, car.presetSpecial, el('div', { class: 'pz-pager' }, car.pgNext, car.pgPrev), car.pgInfo);
     car.bottom = el('footer', { id: 'carBottom' },
       el('div', { class: 'cb-deco' }, el('img', { src: 'icons/wapen.svg', alt: '' })),
       el('div', { class: 'cb-btns' },
@@ -1129,7 +1177,7 @@
     const cov = $('#ccCover'); cov.innerHTML = '';
     if (it) cov.append(coverEl(it, 'cc-noimg')); else cov.append(el('img', { src: 'icons/wapen.svg', alt: '', class: 'cc-logo' }));
     $('#ccTitle').textContent = it ? it.title || '' : 'Klankstroom';
-    $('#ccSub').textContent = it ? [it.artist, it.album].filter(Boolean).join(' — ') : 'Kies rechts een zender of nummer';
+    $('#ccSub').textContent = it ? (it.nowPlaying ? '♪ ' + it.nowPlaying : [it.artist, it.album].filter(Boolean).join(' — ')) : 'Kies rechts een zender of nummer';
     const b = $('#ccBadges'); b.innerHTML = '';
     if (it) {
       b.append(el('span', { class: 'bdg' }, ({ fm: 'FM', cd: 'CD', bt: 'BLUETOOTH' })[it.source] || (it.kind === 'station' ? 'LIVE' : (it.codec || (it.source === 'local' ? 'USB' : 'STREAM')))));
@@ -1152,6 +1200,7 @@
   for (const ev of ['track', 'state', 'queue', 'favs', 'setting', 'mute']) K.on(ev, updateCar);
   K.on('library', () => { if (isCar() && B.tab === 'usb' && !B.page) renderBrowser(); });
   K.on('mtc', () => { if (hasMtc() && !app._mtcSeen) { app._mtcSeen = true; if (isCar() && !B.page && !B.stack.length) renderBrowser(); } });
+  K.on('meta', () => { if (isCar()) updateCar(); });
   K.on('hwapps', () => { if (isCar() && !B.page && (B.tab === 'cd' || B.tab === 'radio') && !B.stack.length) renderBrowser(); });
   // CD/DVD van de autoradio: tijd uit de MCU-status (mm:ss of seconden)
   const secs = v => { v = String(v || ''); if (/^\d+$/.test(v)) return +v; const p = v.split(':').map(Number); return p.some(isNaN) ? NaN : p.reduce((s, x) => s * 60 + x, 0); };

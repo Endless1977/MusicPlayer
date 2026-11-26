@@ -5,7 +5,7 @@
   const MS = () => window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MediaScan;
   const M = K.mtc = {
     available: false, source: '', navi: null, btService: false,
-    fm: { khz: 0, psn: '', rt: '', strength: 0, stereo: 0, pty: 0, seeking: false, scan: [] },
+    fm: { khz: 0, psn: '', rt: '', strength: 0, stereo: 0, pty: 0, seeking: false, scan: [], names: {} },
     dvd: { title: '', pos: '', len: '', idx: '', cnt: '', raw: {} },
     bt: { state: 0, av: 0, dev: '', callIn: '', dialOut: '', phone: '', music: '' },
     log: []
@@ -21,6 +21,7 @@
   const get = async p => { try { const v = (await MS().mtcGet({ param: p })).value; log('? ' + p + ' = ' + v); return v; } catch (e) { log('✗ ' + p + ': ' + (e.message || e)); return ''; } };
   const valOf = s => { s = String(s || ''); const i = s.indexOf('='); return i >= 0 ? s.slice(i + 1) : s; };
   M.set = set; M.get = get;
+  setTimeout(() => { M.fm.names = K.LS.get('fmNames', {}); }, 0);
   M.fmtFreq = khz => khz ? (khz >= 30000 ? (khz / 1000).toFixed(2).replace('.', ',') + ' MHz' : khz + ' kHz') : '—';
 
   let changed = 0;
@@ -53,8 +54,69 @@
     },
     item(khz, name) {
       khz = khz || M.fm.khz;
-      return { kind: 'station', source: 'fm', id: 'fm:' + khz, khz, title: name || M.fmtFreq(khz), artist: 'FM-radio · ' + M.fmtFreq(khz), cover: '' };
+      name = name || (M.fm.names && M.fm.names[khz]) || '';
+      return { kind: 'station', source: 'fm', id: 'fm:' + khz, khz, title: name || M.fmtFreq(khz), artist: 'FM-radio · ' + M.fmtFreq(khz), cover: M.logo(name) };
     }
+  };
+
+  /* ---------- zenderlogo's (uit de Radio Browser-database, op naam) ---------- */
+  const logos = K.LS.get('fmLogos', {}), pend = {};
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pretty = s => String(s || '').replace(/([a-z])(\d)/gi, '$1 $2').replace(/\bnpo\s*r(\d)\b/i, 'NPO Radio $1').trim();
+  M.logo = name => {
+    const k = norm(name);
+    if (!k || k.length < 2) return '';
+    if (k in logos) return logos[k];
+    if ((!pend[k] || Date.now() - pend[k] > 600000) && navigator.onLine && K.radio) {
+      pend[k] = Date.now();
+      K.radio.search({ name: pretty(name), country: 'NL', limit: 10 })
+        .then(l => { const s = l.find(x => x.cover && norm(x.title).includes(k)) || l.find(x => x.cover); logos[k] = s ? s.cover : ''; K.LS.set('fmLogos', logos); K.emit('presets'); K.emit('mtc'); })
+        .catch(() => {});
+    }
+    return '';
+  };
+
+  /* ---------- snel scannen: zelf van zender naar zender zoeken (zonder wachten op elke zender) ---------- */
+  let seekWait = null;
+  M.radio.fastScan = async () => {
+    if (M.fm.seeking || M.fm.fastScan) return;
+    await M.radio.on();
+    const found = [], startKhz = M.fm.khz;
+    M.fm.fastScan = true; M.fm.scan = []; changedSoon();
+    let prev = startKhz, wrapped = false;
+    try {
+      for (let i = 0; i < 60 && M.fm.fastScan; i++) {
+        const done = new Promise(r => { seekWait = r; setTimeout(r, 7000); });
+        await set('ctl_radio_seek=up');
+        await done; seekWait = null;
+        await new Promise(r => setTimeout(r, 120));
+        const k = M.fm.khz;
+        if (!k) break;
+        if (k === prev && i > 0) break;                 // niets meer gevonden
+        if (k < prev) wrapped = true;                    // band rond: van boven naar onder
+        if ((wrapped && k >= startKhz) || found.includes(k)) { if (wrapped && k === startKhz && !found.includes(k)) found.push(k); break; }
+        found.push(k); M.fm.scan = found.slice(); changedSoon();
+        prev = k;
+      }
+    } finally { M.fm.fastScan = false; changedSoon(); }
+    found.sort((a, b) => a - b);
+    M.fm.scan = found;
+    K.emit('fmscan', found);
+    return found;
+  };
+  M.radio.stopScan = () => { M.fm.fastScan = false; if (seekWait) seekWait(); };
+  /* gevonden zenders op de voorkeuzeknoppen zetten: aanvullen of alles vervangen */
+  M.radio.storeScan = (replace) => {
+    const list = K.presets.get('fm');
+    if (replace) for (let i = 0; i < list.length; i++) K.presets.clear('fm', i);
+    const have = new Set(K.presets.filled('fm').map(p => p.khz));
+    let n = 0;
+    for (const k of M.fm.scan) {
+      if (have.has(k)) continue;
+      const i = K.presets.firstFree('fm'); if (i < 0) break;
+      K.presets.set('fm', i, { khz: k, name: (M.fm.names && M.fm.names[k]) || '' }); n++;
+    }
+    K.toast(n + ' zenders op de voorkeuzeknoppen gezet');
   };
 
   /* ---------- DVD / CD ---------- */
@@ -136,7 +198,7 @@
 
   /* ---------- knoppen op de radio / het stuur (MCU "KeyDown") ---------- */
   // standaardcodes uit de radio-app van de fabrikant; zelf te leren in Instellingen
-  const KEYS = { next: [0x10c, 0x12c, 0x14f], prev: [0x104, 0x12b, 0x14e],
+  const KEYS = { next: [0x10c, 0x12c], prev: [0x104, 0x12b], seekup: [0x14f], seekdown: [0x14e],
     'preset:0': [0x11b], 'preset:1': [0x11c], 'preset:2': [0x11d], 'preset:3': [0x11e], 'preset:4': [0x11f], 'preset:5': [0x120] };
   let learn = null;
   M.learnKey = action => new Promise((res, rej) => {
@@ -157,19 +219,20 @@
     if (e.obj === 'Radio') {
       const t = d.type, v = d.value;
       if (t === 'freq') { M.fm.khz = toKhz(v); M.fm.psn = ''; M.fm.rt = ''; }
-      else if (t === 'psn') M.fm.psn = String(v || '').trim();
+      else if (t === 'psn') { M.fm.psn = String(v || '').trim(); if (M.fm.psn && M.fm.khz) { (M.fm.names = M.fm.names || {})[M.fm.khz] = M.fm.psn; K.LS.set('fmNames', M.fm.names); } }
       else if (t === 'rt') M.fm.rt = String(v || '').trim();
       else if (t === 'strength' || t === 'stereo' || t === 'pty' || t === 'pi' || t === 'tp' || t === 'ta') M.fm[t] = v;
       else if (t === 'seek_start' || t === 'seek_start_auto') { M.fm.seeking = true; if (t === 'seek_start_auto') M.fm.scan = []; }
-      else if (t === 'seek_end' || t === 'seek_end_auto') M.fm.seeking = false;
+      else if (t === 'seek_end' || t === 'seek_end_auto') { M.fm.seeking = false; if (seekWait) seekWait(); }
+      else if (t === 'seek_found' && seekWait) seekWait();
       else if (t === 'seek_found_auto' && M.fm.khz) M.fm.scan.push(M.fm.khz);
       if (d.strength != null) M.fm.strength = d.strength;
       if (t !== 'rt' && t !== 'strength') log('← Radio ' + t + ' = ' + (typeof v === 'string' ? v : JSON.stringify(v)));
       const cur = K.player.current;
       if (cur && cur.source === 'fm') {
         const name = M.fm.psn || M.fmtFreq(M.fm.khz);
-        if (cur.khz !== M.fm.khz || cur.title !== name || cur.rtSeen !== M.fm.rt) {
-          Object.assign(cur, { khz: M.fm.khz, id: 'fm:' + M.fm.khz, title: name, artist: M.fm.rt || 'FM-radio · ' + M.fmtFreq(M.fm.khz), rtSeen: M.fm.rt });
+        if (cur.khz !== M.fm.khz || cur.title !== name || cur.rtSeen !== M.fm.rt || (!cur.cover && M.logo(M.fm.psn))) {
+          Object.assign(cur, { khz: M.fm.khz, id: 'fm:' + M.fm.khz, title: name, artist: M.fm.rt || 'FM-radio · ' + M.fmtFreq(M.fm.khz), rtSeen: M.fm.rt, cover: M.logo(M.fm.psn) || cur.cover || '' });
           K.emit('track', cur);
         }
       }

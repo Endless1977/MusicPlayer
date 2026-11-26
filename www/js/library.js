@@ -71,20 +71,36 @@
       const out = list.map(t => ({
         kind: 'track', source: 'local', id: 'lc:' + hash(t.path || t.uri), title: t.title || K.parseName(t.path || '').title,
         artist: t.artist && t.artist !== '<unknown>' ? t.artist : '', album: t.album || '', duration: t.duration ? t.duration / 1000 : undefined,
-        cover: t.art || '', origin: t.volumeLabel || 'Telefoon', plat: 'android', path: t.path, uri: t.uri
-      })).filter(t => !tracks.some(x => x.id === t.id));
+        cover: t.art || '', origin: t.volumeLabel || 'Telefoon', plat: 'android', path: t.path, uri: t.uri, track: t.track || 0
+      })).map(t => { const old = tracks.find(x => x.id === t.id); return old ? (old.track === t.track ? null : { ...old, track: t.track }) : t; }).filter(Boolean);
       await L.addTracks(out);
     },
 
     async urlFor(item) {
       if (item.plat === 'electron') return window.native.fileUrl(item.path);
-      if (item.plat === 'android') return item.path ? Capacitor.convertFileSrc(item.path) : item.uri;
+      if (item.plat === 'android') {
+        if (!item.path) return item.uri;
+        // via de eigen doorgeefserver (Range + CORS): netjes doorspoelen, 'einde' → volgende nummer, echte analyse
+        try {
+          const MS = Capacitor.Plugins.MediaScan;
+          const port = MS && MS.proxyPort ? (await MS.proxyPort()).port : 0;
+          if (port) return `http://127.0.0.1:${port}/f?p=${encodeURIComponent(item.path)}`;
+        } catch {}
+        return Capacitor.convertFileSrc(item.path);
+      }
       if (blobUrls.has(item.id)) return blobUrls.get(item.id);
       const blob = await K.db.getBlob(item.id);
       if (!blob) throw new Error('Bestand niet meer beschikbaar');
       const u = URL.createObjectURL(blob);
       blobUrls.set(item.id, u);
       return u;
+    },
+
+    /* logische volgorde binnen een map: tracknummer, dan bestandsnaam (natuurlijk: 2 vóór 10) */
+    folderOrder(list) {
+      const fname = t => String(t.path || t.title || '').split(/[\\/]/).pop();
+      const tn = t => { const n = parseInt(t.track, 10) % 1000; return n > 0 ? n : 9999; };
+      return list.slice().sort((a, b) => tn(a) - tn(b) || fname(a).localeCompare(fname(b), 'nl', { numeric: true, sensitivity: 'base' }));
     },
 
     async remove(id) { await K.db.del(id); tracks = tracks.filter(t => t.id !== id); K.emit('library'); },

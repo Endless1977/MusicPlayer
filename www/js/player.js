@@ -119,7 +119,7 @@
     ensureGraph();
     if (ctx && ctx.state === 'suspended') ctx.resume();
     // Lokale bestanden (blob/file/capacitor) en Electron: altijd via de analyser.
-    const sameOriginish = /^(blob:|data:|file:|capacitor:|https?:\/\/localhost)/.test(url) || K.platform === 'electron' || url.startsWith(location.origin);
+    const sameOriginish = /^(blob:|data:|file:|capacitor:|https?:\/\/localhost|http:\/\/127\.0\.0\.1:\d+\/f\?)/.test(url) || K.platform === 'electron' || url.startsWith(location.origin);
     // Android: externe streams via de eigen doorgeefserver (voegt CORS toe → echte analyse)
     let urlA = url;
     if (K.platform === 'android' && !sameOriginish && /^https?:\/\//.test(url) && !/\.m3u8(\?|$)/i.test(url)) {
@@ -267,6 +267,11 @@
 
   for (const el of [A, B]) {
     el.addEventListener('ended', () => { if (el === active) P.next(true); });
+    // sommige WebViews melden het einde niet: stil op het eind → toch door naar het volgende nummer
+    el.addEventListener('pause', () => {
+      if (el !== active || !P.playing || !isFinite(el.duration) || el.duration < 5) return;
+      if (el.duration - el.currentTime < 0.6) setTimeout(() => { if (el === active && el.paused && P.playing) P.next(true); }, 400);
+    });
     el.addEventListener('timeupdate', () => { if (el === active) K.emit('time', { t: el.currentTime, d: el.duration }); });
     el.addEventListener('waiting', () => { if (el === active) K.emit('state', 'loading'); });
     el.addEventListener('playing', () => { if (el === active) { P.playing = true; K.emit('state', 'playing'); } });
